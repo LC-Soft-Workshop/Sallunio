@@ -2,7 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-const githubRepository = String.fromEnvironment('TABLEO_GITHUB_REPOSITORY');
+const githubRepository = String.fromEnvironment(
+  'TABLEO_GITHUB_REPOSITORY',
+  defaultValue: 'freakbn777/Tableo',
+);
 
 class UpdateInfo {
   final String version;
