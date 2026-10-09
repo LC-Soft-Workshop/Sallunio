@@ -1,3 +1,5 @@
+import 'flutter_paths.dart';
+
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -60,9 +62,9 @@ void main() {
         await font.load();
         final icons = FontLoader('MaterialIcons')
           ..addFont(
-            File(
-              'E:/DEV/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
-            ).readAsBytes().then((v) => v.buffer.asByteData()),
+            File(materialIconsPath())
+                .readAsBytes()
+                .then((v) => v.buffer.asByteData()),
           );
         await icons.load();
       });

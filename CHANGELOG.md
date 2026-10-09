@@ -3,6 +3,12 @@
 Historique en français, établi à partir des validations conservées du projet.
 Les anciennes versions ne constituent pas des livraisons GitHub rétroactives.
 
+## 1.0.32
+
+- Première livraison Windows publiée sur GitHub, avec le dépôt de mises à jour configuré sur `freakbn777/Tableo`.
+- Tests adaptés aux installations Flutter du serveur de compilation ; fichiers d'essai explicitement fictifs et séparés des données personnelles.
+- Conservation du stockage personnel et des protections de publication de la version 1.0.31.
+
 ## 1.0.31
 
 - Ajout de la vérification des versions publiques GitHub au démarrage et depuis le numéro de version.

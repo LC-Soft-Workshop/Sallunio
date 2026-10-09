@@ -43,7 +43,10 @@ void main() {
       expect(rows(store.saved, 'groups').single['count'], 30);
       expect(workspaceStats(store.saved)['reserved'], 30);
       expect(find.text('30'), findsWidgets);
-      expect(find.text('30 personnes réservées • 3 attribuées • 27 à placer'), findsOneWidget);
+      expect(
+        find.text('30 personnes réservées • 3 attribuées • 27 à placer'),
+        findsOneWidget,
+      );
       expect(find.textContaining('Effectif modifié : 3 → 30'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       await tester.pumpWidget(Tableo(store: store));

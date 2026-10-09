@@ -1,3 +1,5 @@
+import 'flutter_paths.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -88,7 +90,7 @@ void main() {
               matching: find.byType(TextField),
             )
             .first,
-        File('examples/reservations.csv').absolute.path,
+        File('test/fixtures/reservations.csv').absolute.path,
       );
       await tester.tap(find.text('Valider'));
       for (
@@ -150,9 +152,9 @@ void main() {
       await textFont.load();
       final icons = FontLoader('MaterialIcons')
         ..addFont(
-          File(
-            'E:/DEV/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
-          ).readAsBytes().then((v) => v.buffer.asByteData()),
+          File(materialIconsPath())
+              .readAsBytes()
+              .then((v) => v.buffer.asByteData()),
         );
       await icons.load();
     });

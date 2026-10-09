@@ -6,7 +6,8 @@ import sys
 EXACT = {
     '.gitignore', '.gitattributes', '.metadata', 'README.md', 'CHANGELOG.md',
     'DONNEES-ET-MISES-A-JOUR.md', 'pubspec.yaml', 'pubspec.lock', 'analysis_options.yaml',
-    'examples/modele-reservations.csv', 'test/fixtures/logo-fiches.png',
+    'examples/modele-reservations.csv', 'test/fixtures/logo-fiches.png', 'test/flutter_paths.dart',
+    'test/fixtures/reservations.csv',
     'windows/CMakeLists.txt', 'windows/flutter/CMakeLists.txt',
     'windows/runner/resources/app_icon.ico',
     'tools/publication_files.py', 'tools/package_release.py',

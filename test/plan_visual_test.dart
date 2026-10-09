@@ -1,3 +1,5 @@
+import 'flutter_paths.dart';
+
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -21,7 +23,7 @@ void main() {
     await tester.runAsync(() async {
       for (final entry in {
         'Roboto': 'C:/Windows/Fonts/arial.ttf',
-        'MaterialIcons': 'E:/DEV/flutter/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
+        'MaterialIcons': materialIconsPath(),
       }.entries) {
         await (FontLoader(entry.key)..addFont(
               File(entry.value)
