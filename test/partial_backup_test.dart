@@ -193,6 +193,10 @@ void main() {
       );
       await tester.tap(find.text('Importer'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Tout conserver séparément'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Importer les choix'));
+      await tester.pumpAndSettle();
       expect(store.saved!['name'], 'Événement ouvert');
       expect(
         rows(store.saved!, 'groups').length,

@@ -3,6 +3,15 @@
 Historique en français, établi à partir des validations conservées du projet.
 Les anciennes versions ne constituent pas des livraisons GitHub rétroactives.
 
+## 1.0.35
+
+- Import partiel au choix : salles mémorisées, mobilier, réservations ou les trois avec « Tout sélectionner ». Les salles importées ne remplacent pas la salle active.
+- Pour plusieurs événements sélectionnés dans une sauvegarde, choix d'un seul événement source ou d'une fusion de leur contenu dans l'événement ouvert.
+- Choix explicite pour les salles, modèles de mobilier et réservations portant le même nom : garder une version ou conserver les versions séparément.
+- Comparaison des origines, dimensions, capacités, stocks et effectifs dans le dialogue des éléments communs. Aucun choix de version implicite.
+- Conservation des références d'attribution uniquement vers les tables retenues ; les réservations concernées par un mobilier écarté restent à réattribuer, sans lien vers une table supprimée.
+- Conservation de la restauration complète comme mode distinct recréant les événements de la sauvegarde. L'import partiel reste annulable et l'annulation des dialogues ne modifie aucune donnée.
+
 ## 1.0.34
 
 - Sans appui autorisé, maintien d'au moins la moitié du passage entre le bord des tables et les murs : passage de 1,20 m, dégagement au mur d'au moins 60 cm. L'espace nécessaire aux assises reste également respecté.

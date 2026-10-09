@@ -5,6 +5,7 @@ import 'app_version.dart';
 import 'github_updates.dart';
 import 'external_links.dart';
 import 'event_backup.dart';
+import 'backup_merge.dart';
 
 import 'dart:io';
 import 'dart:math';
@@ -1961,6 +1962,169 @@ class _HomeState extends State<Home> {
     }
   }
 
+  Future<List<Json>?> chooseImportSources(List<Json> events) async {
+    if (events.length < 2) return events;
+    int? source;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, update) => AlertDialog(
+          title: const Text('Origine du contenu à importer'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Utiliser le contenu d’un seul événement ou fusionner les événements sélectionnés ?',
+                  ),
+                  for (var i = 0; i < events.length; i++)
+                    ListTile(
+                      title: Text('Événement ${i + 1} : ${events[i]['name']}'),
+                      leading: Icon(
+                        source == i
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_off,
+                      ),
+                      onTap: () => update(() => source = i),
+                    ),
+                  ListTile(
+                    title: const Text('Fusionner les événements sélectionnés'),
+                    subtitle: const Text(
+                      'Choix explicite pour les salles, modèles ou réservations en commun.',
+                    ),
+                    leading: Icon(
+                      source == -1
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_off,
+                    ),
+                    onTap: () => update(() => source = -1),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: source == null ? null : () => Navigator.pop(c, true),
+              child: const Text('Continuer'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (accepted != true) return null;
+    return source == -1 ? events : [events[source!]];
+  }
+
+  Future<Map<String, String>?> resolveBackupConflicts(
+    BackupMergePlan plan,
+  ) async {
+    if (plan.conflicts.isEmpty) return {};
+    final decisions = <String, String>{};
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, update) => AlertDialog(
+          title: Text('Éléments en commun (${plan.conflicts.length})'),
+          content: SizedBox(
+            width: 600,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Choisissez la version à conserver pour chaque élément, y compris ceux de l’événement ouvert. Aucun choix n’est fait automatiquement.',
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Pour le mobilier, garder une version garde son modèle et ses tables. Les versions écartées et leurs tables sont retirées du résultat, y compris celles de l’événement ouvert ; leurs attributions deviennent à réattribuer. Les réservations écartées ne sont pas conservées. La salle active reste inchangée.',
+                  ),
+                  TextButton(
+                    onPressed: () => update(() {
+                      for (final conflict in plan.conflicts) {
+                        decisions[conflict.key] = keepAllVersions;
+                      }
+                    }),
+                    child: const Text('Tout conserver séparément'),
+                  ),
+                  for (final conflict in plan.conflicts)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            conflict.label,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          for (final version in conflict.versions)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 3),
+                              child: Text(
+                                '${version.origin}\n${version.description}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          DropdownButtonFormField<String>(
+                            key: ValueKey(
+                              '${conflict.key}/${decisions[conflict.key]}',
+                            ),
+                            isExpanded: true,
+                            initialValue: decisions[conflict.key],
+                            decoration: const InputDecoration(
+                              labelText: 'Version à garder',
+                            ),
+                            items: [
+                              for (final version in conflict.versions)
+                                DropdownMenuItem(
+                                  value: version.token,
+                                  child: Text(
+                                    '${version.origin} — ${version.description}',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              const DropdownMenuItem(
+                                value: keepAllVersions,
+                                child: Text(
+                                  'Conserver les versions séparément',
+                                ),
+                              ),
+                            ],
+                            onChanged: (value) =>
+                                update(() => decisions[conflict.key] = value!),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: decisions.length == plan.conflicts.length
+                  ? () => Navigator.pop(c, true)
+                  : null,
+              child: const Text('Importer les choix'),
+            ),
+          ],
+        ),
+      ),
+    );
+    return accepted == true ? decisions : null;
+  }
+
   Future<List<Json>?> selectBackupEvents(
     List<Json> events, {
     required bool importing,
@@ -2189,7 +2353,10 @@ class _HomeState extends State<Home> {
         final chosen = await selectBackupEvents(available, importing: true);
         if (chosen == null) return;
         if (!mounted) return;
-        var complete = true, furniture = false, reservations = false;
+        var complete = true,
+            furniture = false,
+            reservations = false,
+            rooms = false;
         final mode = await showDialog<bool>(
           context: context,
           builder: (c) => StatefulBuilder(
@@ -2197,60 +2364,90 @@ class _HomeState extends State<Home> {
               title: const Text('Contenu à importer'),
               content: SizedBox(
                 width: 540,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CheckboxListTile(
-                      title: const Text('Restauration complète des événements'),
-                      subtitle: const Text(
-                        'Réimporte les événements sélectionnés avec tout leur contenu, séparément de l’événement ouvert.',
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CheckboxListTile(
+                        title: const Text(
+                          'Restauration complète des événements',
+                        ),
+                        subtitle: const Text(
+                          'Réimporte les événements sélectionnés avec tout leur contenu, séparément de l’événement ouvert.',
+                        ),
+                        value: complete,
+                        onChanged: (value) => update(() {
+                          complete = value!;
+                          if (complete) {
+                            furniture = false;
+                            reservations = false;
+                            rooms = false;
+                          }
+                        }),
                       ),
-                      value: complete,
-                      onChanged: (value) => update(() {
-                        complete = value!;
-                        if (complete) {
-                          furniture = false;
-                          reservations = false;
-                        }
-                      }),
-                    ),
-                    const Divider(),
-                    Text(
-                      p == null
-                          ? 'Ouvrez un événement pour y ajouter du contenu.'
-                          : 'Ajouter à l’événement ouvert : ${p!['name']}',
-                    ),
-                    CheckboxListTile(
-                      title: const Text('Mobilier'),
-                      subtitle: const Text(
-                        'Types de mobilier, tables et bancs. Conserve la salle actuelle ; vérifier les positions après import.',
+                      const Divider(),
+                      Text(
+                        p == null
+                            ? 'Ouvrez un événement pour y ajouter du contenu.'
+                            : 'Ajouter à l’événement ouvert : ${p!['name']}',
                       ),
-                      value: furniture,
-                      onChanged: p == null
-                          ? null
-                          : (value) => update(() {
-                              furniture = value!;
-                              if (furniture) complete = false;
-                            }),
-                    ),
-                    CheckboxListTile(
-                      title: const Text('Réservations'),
-                      subtitle: const Text(
-                        'Groupes, repas et besoins. Les attributions sont reprises seulement si le mobilier est importé aussi.',
+                      CheckboxListTile(
+                        title: const Text(
+                          'Tout sélectionner pour l’événement ouvert',
+                        ),
+                        value: rooms && furniture && reservations,
+                        onChanged: p == null
+                            ? null
+                            : (value) => update(() {
+                                rooms = furniture = reservations = value!;
+                                if (value == true) complete = false;
+                              }),
                       ),
-                      value: reservations,
-                      onChanged: p == null
-                          ? null
-                          : (value) => update(() {
-                              reservations = value!;
-                              if (reservations) complete = false;
-                            }),
-                    ),
-                    if (!complete)
-                      const Text(
-                        'Ajoute les éléments sélectionnés sans effacer le contenu existant. Les zones et accès ne sont repris qu’en restauration complète.',
+                      CheckboxListTile(
+                        title: const Text('Salles'),
+                        subtitle: const Text(
+                          'Dimensions et contours, ajoutés aux salles mémorisées. La salle active reste inchangée.',
+                        ),
+                        value: rooms,
+                        onChanged: p == null
+                            ? null
+                            : (value) => update(() {
+                                rooms = value!;
+                                if (rooms) complete = false;
+                              }),
                       ),
-                  ],
+                      CheckboxListTile(
+                        title: const Text('Mobilier'),
+                        subtitle: const Text(
+                          'Types de mobilier, tables et bancs. Conserve la salle actuelle ; vérifier les positions après import.',
+                        ),
+                        value: furniture,
+                        onChanged: p == null
+                            ? null
+                            : (value) => update(() {
+                                furniture = value!;
+                                if (furniture) complete = false;
+                              }),
+                      ),
+                      CheckboxListTile(
+                        title: const Text('Réservations'),
+                        subtitle: const Text(
+                          'Groupes, repas et besoins. Les attributions sont reprises seulement si le mobilier est importé aussi.',
+                        ),
+                        value: reservations,
+                        onChanged: p == null
+                            ? null
+                            : (value) => update(() {
+                                reservations = value!;
+                                if (reservations) complete = false;
+                              }),
+                      ),
+                      if (!complete)
+                        const Text(
+                          'Les éléments communs font l’objet d’un choix avant import. Les zones et accès ne sont repris qu’en restauration complète.',
+                        ),
+                    ],
+                  ),
                 ),
               ),
               actions: [
@@ -2259,7 +2456,7 @@ class _HomeState extends State<Home> {
                   child: const Text('Annuler'),
                 ),
                 FilledButton(
-                  onPressed: complete || furniture || reservations
+                  onPressed: complete || rooms || furniture || reservations
                       ? () => Navigator.pop(c, true)
                       : null,
                   child: const Text('Importer'),
@@ -2285,12 +2482,18 @@ class _HomeState extends State<Home> {
             transform.value = Matrix4.identity();
           });
         } else {
-          final merged = injectEventBackup(
+          final sources = await chooseImportSources(chosen);
+          if (sources == null || !mounted) return;
+          final plan = BackupMergePlan(
             p!,
-            chosen,
+            sources,
+            rooms: rooms,
             furniture: furniture,
             reservations: reservations,
           );
+          final decisions = await resolveBackupConflicts(plan);
+          if (decisions == null || !mounted) return;
+          final merged = plan.apply(decisions);
           await saveImportedEvents([merged]);
           if (!mounted) return;
           checkpoint();
