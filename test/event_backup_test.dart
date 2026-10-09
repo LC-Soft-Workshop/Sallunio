@@ -85,6 +85,20 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       final store = BackupStore();
+      for (final kind in ['zone', 'obstacle', 'entry', 'exit']) {
+        rows(store.events[1], 'items').add({
+          'id': uid(),
+          'kind': kind,
+          'label': 'Objet fictif $kind',
+          'shape': 'rectangle',
+          'x': 4.0,
+          'y': 4.0,
+          'w': 1.0,
+          'h': 1.0,
+          'fixed': true,
+          if (kind == 'zone') 'zoneFill': 'Invisible',
+        });
+      }
       final path = File('tmp/backup-ui-${uid()}.tableo.json').absolute.path;
       await tester.pumpWidget(Tableo(store: store));
       await tester.pumpAndSettle();
@@ -175,6 +189,15 @@ void main() {
       expect(store.events.last['name'], 'Brocante hiver');
       expect(store.events.last['id'], isNot(store.events[1]['id']));
       expect(store.events.last['groups'], store.events[1]['groups']);
+      final restored = clone(store.events.last)..['id'] = store.events[1]['id'];
+      expect(
+        restored,
+        store.events[1],
+        reason: 'Full restoration retains every field, object and position',
+      );
+      for (final kind in ['zone', 'obstacle', 'entry', 'exit']) {
+        expect(rows(restored, 'items').any((i) => i['kind'] == kind), true);
+      }
       await tester.runAsync(() => File(path).delete());
       expect(tester.takeException(), isNull);
     },

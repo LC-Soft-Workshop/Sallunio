@@ -2373,7 +2373,7 @@ class _HomeState extends State<Home> {
                           'Restauration complète des événements',
                         ),
                         subtitle: const Text(
-                          'Réimporte les événements sélectionnés avec tout leur contenu, séparément de l’événement ouvert.',
+                          'Restaure tout : événements, salles, plan et disposition, mobilier, réservations et attributions, zones, obstacles, entrées, sorties et autres réglages. Recrée les événements de la sauvegarde, séparément de l’événement ouvert.',
                         ),
                         value: complete,
                         onChanged: (value) => update(() {
@@ -2389,7 +2389,7 @@ class _HomeState extends State<Home> {
                       Text(
                         p == null
                             ? 'Ouvrez un événement pour y ajouter du contenu.'
-                            : 'Ajouter à l’événement ouvert : ${p!['name']}',
+                            : 'Import partiel dans l’événement ouvert : ${p!['name']}',
                       ),
                       CheckboxListTile(
                         title: const Text(
@@ -2444,7 +2444,7 @@ class _HomeState extends State<Home> {
                       ),
                       if (!complete)
                         const Text(
-                          'Les éléments communs font l’objet d’un choix avant import. Les zones et accès ne sont repris qu’en restauration complète.',
+                          'Import partiel limité aux salles, au mobilier et aux réservations cochés. Pour reprendre aussi tout le plan, les zones, obstacles, entrées et sorties, choisissez « Restauration complète des événements ».',
                         ),
                     ],
                   ),

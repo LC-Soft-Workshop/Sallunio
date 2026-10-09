@@ -3,6 +3,12 @@
 Historique en français, établi à partir des validations conservées du projet.
 Les anciennes versions ne constituent pas des livraisons GitHub rétroactives.
 
+## 1.0.36
+
+- Clarification du menu d'import : la restauration complète reprend tous les événements sélectionnés et tout leur contenu, dont le plan, la disposition, les zones, obstacles, entrées, sorties, attributions et réglages.
+- L'import partiel dans l'événement courant reste limité aux salles, au mobilier et aux réservations cochés.
+- Vérification de la restitution intégrale de tous les champs et des objets du plan lors d'une restauration complète, y compris les zones invisibles.
+
 ## 1.0.35
 
 - Import partiel au choix : salles mémorisées, mobilier, réservations ou les trois avec « Tout sélectionner ». Les salles importées ne remplacent pas la salle active.
