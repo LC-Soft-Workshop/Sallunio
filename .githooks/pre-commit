@@ -1,0 +1,2 @@
+#!/bin/sh
+python tools/publication_files.py --tracked || exit 1

@@ -1,0 +1,39 @@
+name: Validation et livraison Windows
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.6'
+          channel: stable
+      - name: Contrôler les fichiers publiés
+        run: |
+          python tools/publication_files.py --tracked
+          python tools/test_publication.py
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - name: Compiler avec le dépôt de mises à jour
+        run: flutter build windows --release --dart-define=TABLEO_GITHUB_REPOSITORY=${{ github.repository }}
+      - name: Préparer la livraison sans données personnelles
+        run: python tools/package_release.py
+      - name: Publier une version et ses changements en français
+        if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python tools/release_notes.py "${{ github.ref_name }}"
+          $version = (Select-String '^version: ([0-9.]+)' pubspec.yaml).Matches.Groups[1].Value
+          if ("${{ github.ref_name }}" -ne "v$version") { throw 'Le tag ne correspond pas à la version du logiciel' }
+          gh release create "${{ github.ref_name }}" "dist/Tableo-Windows-$version.zip" "dist/Tableo-Windows-$version.zip.sha256" --title "Tableo $version" --notes-file release-notes.md
