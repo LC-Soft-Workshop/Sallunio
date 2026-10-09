@@ -36,4 +36,7 @@ jobs:
           python tools/release_notes.py "${{ github.ref_name }}"
           $version = (Select-String '^version: ([0-9.]+)' pubspec.yaml).Matches.Groups[1].Value
           if ("${{ github.ref_name }}" -ne "v$version") { throw 'Le tag ne correspond pas à la version du logiciel' }
-          gh release create "${{ github.ref_name }}" "dist/Tableo-Windows-$version.zip" "dist/Tableo-Windows-$version.zip.sha256" --title "Tableo $version" --notes-file release-notes.md
+          Copy-Item "dist/Tableo-Windows-$version.zip" 'dist/Tableo-Windows.zip'
+          $checksum = (Get-FileHash 'dist/Tableo-Windows.zip' -Algorithm SHA256).Hash.ToLower()
+          "$checksum  Tableo-Windows.zip" | Set-Content 'dist/Tableo-Windows.zip.sha256' -Encoding ascii
+          gh release create "${{ github.ref_name }}" "dist/Tableo-Windows-$version.zip" "dist/Tableo-Windows-$version.zip.sha256" 'dist/Tableo-Windows.zip' 'dist/Tableo-Windows.zip.sha256' --title "Tableo $version" --notes-file release-notes.md

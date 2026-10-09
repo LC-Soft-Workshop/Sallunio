@@ -4,6 +4,13 @@ Tableo est une application Windows en français pour organiser des événements 
 plans de salle, mobilier, réservations, attribution des places et préparation du service.
 La version 1 fonctionne localement, sans compte.
 
+## Télécharger Tableo pour Windows
+
+**[Télécharger le ZIP de la dernière version](https://github.com/freakbn777/Tableo/releases/latest/download/Tableo-Windows.zip)**
+
+Ce lien télécharge toujours la dernière version publiée.
+[Voir les changements de cette version](https://github.com/freakbn777/Tableo/releases/latest).
+
 ## Fonctions
 
 - Plusieurs événements et salles, profils loto, soirée, marché de Noël et brocante.
@@ -20,7 +27,7 @@ et ne sont jamais imprimées dans les PDF.
 
 ## Installation et mises à jour
 
-Télécharger le ZIP Windows dans les versions GitHub, le décompresser puis lancer
+Télécharger le ZIP Windows avec le lien ci-dessus, le décompresser puis lancer
 `tableo.exe`. Garder tous les fichiers du paquet ensemble.
 Une nouvelle version se décompresse dans un nouveau dossier ; les événements
 restent dans le dossier personnel Windows, indépendamment des exécutables.
