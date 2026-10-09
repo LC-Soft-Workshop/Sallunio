@@ -253,7 +253,10 @@ bool overlaps(Json a, Json b, [double margin = 0]) =>
     number(a['y']) < number(b['y']) + number(b['h']) + margin - .000001 &&
     number(a['y']) + number(a['h']) + margin > number(b['y']) + .000001;
 double seatEnvelope(Json a) => a['kind'] == 'table' && a['capacity'] != 0
-    ? (a['seating'] == 'Bancs' ? .4 : .55)
+    ? adaptedPlaces(a).fold<double>(
+        a['seating'] == 'Bancs' ? .4 : .55,
+        (depth, place) => max(depth, number(place['depth'], 1.2)),
+      )
     : 0;
 List<Point<double>> roomPolygon(Json room) {
   final text = '${room['polygon'] ?? ''}'.trim();
@@ -502,34 +505,78 @@ class PlanGeometry {
 
   Json bounds(Json a) => envelope(a, blocked[a['id']] ?? {});
   int capacity(Json t) {
-    final declared = t['capacity'] as int;
-    final seated = seatedEdges(t), removed = blocked[t['id']] ?? {};
-    final total = seated.values.fold<double>(0, (s, n) => s + n);
-    final remaining = seated.entries.where((e) => !removed.contains(e.key));
-    if (total == 0 || !seated.keys.any(removed.contains)) return declared;
-    final length = remaining.fold<double>(0, (s, e) => s + e.value);
-    final comfortable = remaining.fold<int>(
+    final base = baseCapacity(t);
+    final extra = adaptedPlaces(t).fold<int>(
       0,
-      (s, e) => s + (e.value / .6 + .000001).floor(),
+      (sum, place) =>
+          sum +
+          max(0, ((number(place['width'], .9) - .6) / .6 - .000001).ceil()),
     );
-    return min(
-      declared,
-      min((declared * length / total + .000001).floor(), comfortable),
-    );
+    return max(0, base - extra);
   }
+
+  int baseCapacity(Json t) {
+    return ordinaryCapacity(t, blocked[t['id']] ?? {});
+  }
+}
+
+int ordinaryCapacity(Json t, Set<String> removed) {
+  final declared = t['capacity'] as int;
+  final seated = seatedEdges(t);
+  final total = seated.values.fold<double>(0, (s, n) => s + n);
+  final remaining = seated.entries.where((e) => !removed.contains(e.key));
+  if (total == 0 || !seated.keys.any(removed.contains)) return declared;
+  final length = remaining.fold<double>(0, (s, e) => s + e.value);
+  final comfortable = remaining.fold<int>(
+    0,
+    (s, e) => s + (e.value / .6 + .000001).floor(),
+  );
+  return min(
+    declared,
+    min((declared * length / total + .000001).floor(), comfortable),
+  );
 }
 
 int effectiveCapacity(Json p, Json t, [PlanGeometry? geometry]) =>
     (geometry ?? PlanGeometry(p, rows(p, 'items'))).capacity(t);
 
 Json envelope(Json a, [Set<String> blocked = const {}]) {
-  final m = seatEnvelope(a);
+  final m = a['kind'] == 'table' && a['capacity'] != 0
+      ? (a['seating'] == 'Bancs' ? .4 : .55)
+      : 0.0;
   final edges = seatedEdges(a);
+  final adapted = <String, double>{};
+  if (a['kind'] == 'table' && adaptedPlaces(a).isNotEmpty) {
+    final extra = adaptedPlaces(a).fold<int>(
+      0,
+      (sum, place) =>
+          sum +
+          max(0, ((number(place['width'], .9) - .6) / .6 - .000001).ceil()),
+    );
+    final positions = placeLabelPositions(
+      a,
+      max(0, ordinaryCapacity(a, blocked) - extra),
+      blocked,
+    );
+    for (final place in adaptedPlaces(a)) {
+      final slot = place['slot'] as int;
+      if (slot < 0 || slot >= positions.length) continue;
+      final point = positions[slot];
+      final edge = point.x < 0
+          ? 'left'
+          : point.x > number(a['w'])
+          ? 'right'
+          : point.y < 0
+          ? 'top'
+          : 'bottom';
+      adapted[edge] = max(adapted[edge] ?? m, number(place['depth'], 1.2));
+    }
+  }
   double margin(String edge) => blocked.contains(edge)
       ? 0
       : (a['shape'] == 'cercle' && a['sides'] != 'Un côté') ||
             edges.containsKey(edge)
-      ? m
+      ? adapted[edge] ?? m
       : 0;
   final left = margin('left'),
       right = margin('right'),
@@ -659,13 +706,62 @@ List<String> preparationNotes(Json p) => _preparationChecks(p).$2;
     final capacity = geo.capacity(t);
     if (capacity < t['capacity']) {
       notes.add(
-        '${t['label']} : jonction sans assises ; $capacity places utilisables sur ${t['capacity']} déclarées.',
+        '${t['label']} : ${adaptedPlaces(t).isEmpty ? 'jonction sans assises' : 'espace adapté et faces sans assises'} ; $capacity places utilisables sur ${t['capacity']} déclarées.',
       );
     }
     if (occupancy(p, t['id']) > capacity) {
       result.add(
         '${t['label']} : capacité utilisable dépassée ($capacity). Réattribuer des places.',
       );
+    }
+    final people = tablePeople(p, t, geo);
+    final positions = placeLabelPositions(
+      t,
+      capacity,
+      geo.blocked[t['id']] ?? {},
+    );
+    for (final place in adaptedPlaces(t)) {
+      if (place['slot'] >= capacity) {
+        result.add(
+          '${t['label']} : emplacement adapté devenu inutilisable. Revoir les places adaptées.',
+        );
+      }
+    }
+    for (var slot = 0; slot < people.length; slot++) {
+      final person = people[slot];
+      if (person == null) continue;
+      final seat = person['seat'];
+      if (seat['need'] == 'Fauteuil' &&
+          !adaptedPlaces(t).any((place) => place['slot'] == slot)) {
+        result.add(
+          '${t['label']} place ${slot + 1} : prévoir un emplacement adapté pour ${person['group']['name']}.',
+        );
+      }
+      final wanted = seat['table'] == t['id']
+          ? int.tryParse('${seat['slot']}')
+          : null;
+      if (wanted != null && wanted != slot) {
+        result.add(
+          '${t['label']} : emplacement demandé indisponible pour ${person['group']['name']} place ${seat['number']}.',
+        );
+      }
+      final companion = int.tryParse('${seat['companion']}');
+      if (companion != null) {
+        final adjacent = List.generate(people.length, (n) => n).any(
+          (n) =>
+              n != slot &&
+              n < positions.length &&
+              slot < positions.length &&
+              people[n]?['group']['id'] == person['group']['id'] &&
+              people[n]?['index'] == companion - 1 &&
+              positions[n].distanceTo(positions[slot]) <= 1.2,
+        );
+        if (!adjacent) {
+          notes.add(
+            '${t['label']} : rapprocher l’accompagnant de la place ${slot + 1}.',
+          );
+        }
+      }
     }
   }
   for (var i = 0; i < items.length; i++) {
@@ -1693,28 +1789,25 @@ Map<String, int> planMarkerColors(Json p) {
 
 Set<String> tableMarkers(Json p, String id) {
   final markers = <String>{};
-  for (final g in rows(p, 'groups')) {
-    if (!(g['alloc'] as List).any(
-      (a) => a['table'] == id && number(a['count']) > 0,
-    )) {
-      continue;
+  final matching = tables(p).where((t) => t['id'] == id);
+  if (matching.isNotEmpty && adaptedPlaces(matching.first).isNotEmpty) {
+    markers.add('Emplacement adapté');
+  }
+  final seats = <Json>[];
+  for (final group in rows(p, 'groups')) {
+    for (final index in groupTablePeople(group)[id] ?? <int>[]) {
+      seats.add(individualSeat(group, index));
     }
-    final seats = (g['seats'] as List? ?? []).cast<Json>();
-    final people = [g, ...seats];
-    if (people.any(
-      (v) => (v['needs'] ?? v['need'] ?? '').toString().trim().isNotEmpty,
-    )) {
+  }
+  for (final seat in seats) {
+    if ((seat['need'] ?? '').toString().trim().isNotEmpty) {
       markers.add('Mobilité / PMR');
     }
-    if (people.any((v) => (v['allergy'] ?? '').toString().trim().isNotEmpty)) {
+    if ((seat['allergy'] ?? '').toString().trim().isNotEmpty) {
       markers.add('Allergie');
     }
-    final count = g['count'] as int;
-    for (var i = 0; i < count && mealsEnabled(p); i++) {
-      final meal = i < seats.length ? seats[i]['meal'] ?? g['meal'] : g['meal'];
-      if (meal != null && meal.toString().isNotEmpty) {
-        markers.add('Repas : $meal');
-      }
+    if (mealsEnabled(p) && (seat['meal'] ?? '').toString().isNotEmpty) {
+      markers.add('Repas : ${seat['meal']}');
     }
   }
   return markers;
@@ -1817,6 +1910,18 @@ void allocate(Json p) {
   }
   final gs = rows(p, 'groups').where((g) => g['locked'] != true).toList()
     ..sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
+  if (ts.any((t) => adaptedPlaces(t).isNotEmpty)) {
+    int mobility(Json g) => List.generate(
+      g['count'],
+      (i) => individualSeat(g, i),
+    ).where((s) => s['need'] == 'Fauteuil').length;
+    gs.sort((a, b) {
+      final priority = mobility(b).compareTo(mobility(a));
+      return priority == 0
+          ? (b['count'] as int).compareTo(a['count'] as int)
+          : priority;
+    });
+  }
   final geo = PlanGeometry(p, rows(p, 'items'));
   final usable = ts
       .where((t) => fits(p, t, rows(p, 'items'), geometry: geo))
@@ -1864,6 +1969,33 @@ void allocate(Json p) {
               !forbidden.contains(t['id']),
         )
         .toList();
+    final wheelchair = List.generate(
+      g['count'],
+      (i) => individualSeat(g, i),
+    ).where((s) => s['need'] == 'Fauteuil').length;
+    if (wheelchair > 0) {
+      final ranks = {
+        for (var i = 0; i < allowed.length; i++) allowed[i]['id']: i,
+      };
+      int availableAdapted(Json t) {
+        final people = tablePeople(p, t, geo);
+        return adaptedPlaces(t)
+            .where(
+              (place) =>
+                  place['slot'] < people.length &&
+                  people[place['slot']] == null,
+            )
+            .length;
+      }
+
+      allowed.sort((a, b) {
+        final score = min(
+          wheelchair,
+          availableAdapted(b),
+        ).compareTo(min(wheelchair, availableAdapted(a)));
+        return score == 0 ? ranks[a['id']]!.compareTo(ranks[b['id']]!) : score;
+      });
+    }
     if (preferences[g['id']]!.isNotEmpty) {
       final scores = {
         for (final t in allowed) t['id']: preferenceScore(p, g, t),
@@ -1920,6 +2052,41 @@ List<Point<double>> placeLabelPositions(
   final positions = <Point<double>>[];
   if (count == 0) return positions;
   final width = number(table['w']), height = number(table['h']);
+  final turns = ((table['rotation'] as int? ?? 0) ~/ 90) % 4;
+  if (turns != 0) {
+    const names = ['top', 'right', 'bottom', 'left'];
+    final original = {
+      ...table,
+      'rotation': 0,
+      'w': turns.isOdd ? height : width,
+      'h': turns.isOdd ? width : height,
+    };
+    if (table['sides'] == 'Un côté') {
+      original['seatSide'] = rotateSeatingSide(
+        table['seatSide'] ?? 'Bas',
+        (4 - turns) * 90,
+      );
+    }
+    final previousBlocked = blocked
+        .map((edge) => names[(names.indexOf(edge) + 4 - turns) % 4])
+        .toSet();
+    for (final point in placeLabelPositions(original, count, previousBlocked)) {
+      var x = point.x,
+          y = point.y,
+          w = number(original['w']),
+          h = number(original['h']);
+      for (var turn = 0; turn < turns; turn++) {
+        final oldX = x;
+        x = h - y;
+        y = oldX;
+        final oldW = w;
+        w = h;
+        h = oldW;
+      }
+      positions.add(Point(x, y));
+    }
+    return positions;
+  }
   if (table['shape'] == 'cercle' && table['sides'] != 'Un côté') {
     for (var i = 0; i < count; i++) {
       final angle = 2 * pi * i / count;
@@ -1950,9 +2117,50 @@ List<Point<double>> placeLabelPositions(
   for (final index in remainder) {
     if (left-- > 0) counts[index]++;
   }
+  if (adaptedPlaces(table).isNotEmpty) {
+    final widths = List.generate(count, (slot) {
+      final match = adaptedPlaces(table)
+          .where((place) => place['slot'] == slot);
+      return match.isEmpty ? .6 : number(match.first['width'], .9);
+    });
+    // Partition consecutive numbered places across the available seated edges.
+    // Prefer the usual distribution, while leaving the configured widths intact.
+    var states = <int, (double, List<int>)>{0: (0, <int>[])};
+    for (var edge = 0; edge < edges.length; edge++) {
+      final next = <int, (double, List<int>)>{};
+      for (final state in states.entries) {
+        var extent = 0.0;
+        for (var take = 0; take <= count - state.key; take++) {
+          if (take > 0) extent += widths[state.key + take - 1];
+          if (extent > edges[edge].value + .000001) break;
+          final end = state.key + take,
+              cost = state.value.$1 + pow(take - counts[edge], 2);
+          if (!next.containsKey(end) || cost < next[end]!.$1) {
+            next[end] = (cost.toDouble(), [...state.value.$2, take]);
+          }
+        }
+      }
+      states = next;
+    }
+    final proposal = states[count];
+    if (proposal != null) {
+      for (var edge = 0; edge < counts.length; edge++) {
+        counts[edge] = proposal.$2[edge];
+      }
+    }
+  }
   for (var edge = 0; edge < edges.length; edge++) {
+    final firstSlot = positions.length;
+    final widths = List.generate(counts[edge], (i) {
+      final matching = adaptedPlaces(table)
+          .where((place) => place['slot'] == firstSlot + i);
+      return matching.isEmpty ? .6 : number(matching.first['width'], .9);
+    });
+    final extent = widths.fold<double>(0, (sum, width) => sum + width);
+    var consumed = 0.0;
     for (var i = 0; i < counts[edge]; i++) {
-      final fraction = (i + .5) / counts[edge];
+      final fraction = (consumed + widths[i] / 2) / extent;
+      consumed += widths[i];
       positions.add(switch (edges[edge].key) {
         'top' => Point(width * fraction, -.25),
         'bottom' => Point(width * fraction, height + .25),
@@ -1965,20 +2173,130 @@ List<Point<double>> placeLabelPositions(
 }
 
 List<String?> tablePlaceLabels(Json p, Json table, [PlanGeometry? geometry]) {
-  final capacity = effectiveCapacity(p, table, geometry);
-  final labels = <String?>[];
-  for (final group in rows(p, 'groups')) {
-    final count = (group['alloc'] as List)
-        .where((a) => a['table'] == table['id'])
-        .fold<int>(0, (sum, a) => sum + (a['count'] as int));
-    for (var i = 0; i < count && labels.length < capacity; i++) {
-      labels.add(group['name'] as String);
+  return tablePeople(p, table, geometry)
+      .map(
+        (person) => person == null
+            ? null
+            : (person['seat']['name'] ?? '').toString().trim().isEmpty
+            ? person['group']['name'] as String
+            : person['seat']['name'] as String,
+      )
+      .toList();
+}
+
+List<Json> adaptedPlaces(Json table) =>
+    (table['adaptedPlaces'] as List? ?? []).cast<Json>();
+
+Json individualSeat(Json group, int index) {
+  final seats = (group['seats'] as List? ?? []).cast<Json>();
+  return {
+    'number': index + 1,
+    'name': '',
+    'meal': group['meal'] ?? '',
+    'need': group['needs'] ?? '',
+    'allergy': group['allergy'] ?? '',
+    'companion': '',
+    if (index < seats.length) ...seats[index],
+  };
+}
+
+Map<String, List<int>> groupTablePeople(Json group) {
+  final budget = <String, int>{};
+  for (final allocation in (group['alloc'] as List).cast<Json>()) {
+    budget[allocation['table']] =
+        (budget[allocation['table']] ?? 0) + (allocation['count'] as int);
+  }
+  final result = {for (final id in budget.keys) id: <int>[]};
+  final assigned = <int>{};
+  for (var i = 0; i < group['count']; i++) {
+    final id = individualSeat(group, i)['table'];
+    if (budget.containsKey(id) && result[id]!.length < budget[id]!) {
+      result[id]!.add(i);
+      assigned.add(i);
     }
   }
-  while (labels.length < capacity) {
-    labels.add(null);
+  for (var i = 0; i < group['count']; i++) {
+    if (assigned.contains(i)) continue;
+    for (final id in budget.keys) {
+      if (result[id]!.length < budget[id]!) {
+        result[id]!.add(i);
+        break;
+      }
+    }
   }
-  return labels;
+  for (final indices in result.values) {
+    indices.sort();
+  }
+  return result;
+}
+
+/// Quantities remain the source of truth; individual places follow allocations.
+List<Json?> tablePeople(Json p, Json table, [PlanGeometry? geometry]) {
+  final capacity = effectiveCapacity(p, table, geometry);
+  final result = List<Json?>.filled(capacity, null);
+  final people = <Json>[];
+  for (final group in rows(p, 'groups')) {
+    for (final index in groupTablePeople(group)[table['id']] ?? <int>[]) {
+      people.add({
+        'group': group,
+        'index': index,
+        'seat': individualSeat(group, index),
+      });
+    }
+  }
+  final pending = <Json>[];
+  for (final person in people) {
+    final seat = person['seat'];
+    final slot = seat['table'] == table['id']
+        ? int.tryParse('${seat['slot']}')
+        : null;
+    if (slot != null && slot >= 0 && slot < capacity && result[slot] == null) {
+      result[slot] = person;
+    } else {
+      pending.add(person);
+    }
+  }
+  final order = {for (var i = 0; i < pending.length; i++) pending[i]: i};
+  if (adaptedPlaces(table).isNotEmpty) {
+    pending.sort((a, b) {
+      final priority = (b['seat']['need'] == 'Fauteuil' ? 1 : 0).compareTo(
+        a['seat']['need'] == 'Fauteuil' ? 1 : 0,
+      );
+      return priority == 0 ? order[a]!.compareTo(order[b]!) : priority;
+    });
+  }
+  for (final person in pending) {
+    var slot = -1;
+    if (person['seat']['need'] == 'Fauteuil') {
+      for (final place in adaptedPlaces(table)) {
+        final n = place['slot'] as int;
+        if (n >= 0 && n < capacity && result[n] == null) {
+          slot = n;
+          break;
+        }
+      }
+    }
+    slot = slot < 0 ? result.indexOf(null) : slot;
+    if (slot >= 0) result[slot] = person;
+  }
+  return result;
+}
+
+List<Json> assignedPeople(Json p, Json group) {
+  final result = List<Json>.generate(
+    group['count'],
+    (_) => {'table': null, 'slot': null},
+  );
+  for (final table in tables(p)) {
+    final people = tablePeople(p, table);
+    for (var slot = 0; slot < people.length; slot++) {
+      final person = people[slot];
+      if (person != null && person['group']['id'] == group['id']) {
+        result[person['index']] = {'table': table, 'slot': slot};
+      }
+    }
+  }
+  return result;
 }
 
 // RFC-style quoted cells, commas/semicolons, embedded newlines and UTF-8 BOM.
@@ -2117,6 +2435,27 @@ void validateProject(Json p) {
   }
   final ids = <String>{};
   for (final t in rows(p, 'items')) {
+    if (t['adaptedPlaces'] != null) {
+      if (t['adaptedPlaces'] is! List || t['adaptedPlaces'].length > 100) {
+        throw const FormatException('Emplacements adaptés invalides');
+      }
+      final slots = <int>{};
+      for (final place in t['adaptedPlaces']) {
+        if (place is! Map ||
+            place['slot'] is! int ||
+            place['slot'] < 0 ||
+            place['slot'] >= 100 ||
+            !slots.add(place['slot']) ||
+            !number(place['width']).isFinite ||
+            number(place['width']) < .6 ||
+            number(place['width']) > 3 ||
+            !number(place['depth']).isFinite ||
+            number(place['depth']) < .55 ||
+            number(place['depth']) > 3) {
+          throw const FormatException('Emplacement adapté invalide');
+        }
+      }
+    }
     if (t['note'] != null &&
         (t['note'] is! String || t['note'].length > 1000)) {
       throw const FormatException('Note d’organisation invalide');
@@ -2187,6 +2526,15 @@ void validateProject(Json p) {
         throw const FormatException('Places anonymes invalides');
       }
       for (final s in g['seats']) {
+        if (s['name'] != null &&
+                (s['name'] is! String || s['name'].length > 200) ||
+            s['slot'] != null &&
+                (s['slot'] is! int || s['slot'] < 0 || s['slot'] >= 100) ||
+            s['table'] != null && s['table'] is! String) {
+          throw const FormatException(
+            'Identité ou emplacement individuel invalide',
+          );
+        }
         if (s['number'] is! int ||
             s['number'] < 1 ||
             !(p['meals'] as List).contains(s['meal']) ||

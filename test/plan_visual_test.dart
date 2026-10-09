@@ -46,6 +46,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Légende', skipOffstage: false));
+    await tester.pumpAndSettle();
     expect(find.text('Légende'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Mobilité / PMR'),

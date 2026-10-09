@@ -12,8 +12,13 @@ import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import 'domain.dart';
+import 'plan_tools.dart';
+
+import 'package:flutter/services.dart';
+
 import 'storage.dart';
 import 'exports.dart';
 import 'csv_example.dart';
@@ -237,6 +242,88 @@ class _HomeState extends State<Home> {
   final transform = TransformationController();
   final cursorPosition = ValueNotifier<Offset?>(null);
   bool showPlaceLabels = false;
+  final selectedTables = <String>{};
+  bool multiSelect = false, moveAssembly = false, measuring = false;
+  String planFilter = 'Toutes les tables';
+  Offset? measureStart, measureEnd;
+  Set<String> draggingTables = {};
+  bool dragBlocked = false;
+
+  bool additiveClick = false;
+  void selectPlanItem(Json item, {bool? additive}) {
+    final multiple =
+        additive ?? (multiSelect || HardwareKeyboard.instance.isControlPressed);
+    setState(() {
+      selected = item['id'];
+      if (item['kind'] != 'table') {
+        selectedTables.clear();
+        return;
+      }
+      if (!multiple) selectedTables.clear();
+      if (!selectedTables.add(item['id'])) selectedTables.remove(item['id']);
+      if (moveAssembly && !multiple) {
+        final geo = PlanGeometry(p!, rows(p!, 'items'));
+        selectedTables.addAll(
+          tables(p!)
+              .where((t) => geo.sameAssembly(item, t))
+              .map((t) => t['id'] as String),
+        );
+      }
+    });
+  }
+
+  List<Widget> zoneHandles(Json item, double scale) {
+    return ['top-left', 'top-right', 'bottom-left', 'bottom-right'].map((
+      corner,
+    ) {
+      final left = corner.contains('left'), top = corner.contains('top');
+      return Positioned(
+        left: (number(item['x']) + (left ? 0 : number(item['w']))) * scale - 12,
+        top: (number(item['y']) + (top ? 0 : number(item['h']))) * scale - 12,
+        child: MouseRegion(
+          cursor: left == top
+              ? SystemMouseCursors.resizeUpLeftDownRight
+              : SystemMouseCursors.resizeUpRightDownLeft,
+          child: Tooltip(
+            message: 'Redimensionner la zone',
+            child: GestureDetector(
+              key: ValueKey('resize-${item['id']}-$corner'),
+              behavior: HitTestBehavior.opaque,
+              onPanStart: (_) {
+                checkpoint();
+                resizeOrigin = clone(item);
+                resizeDx = resizeDy = 0;
+              },
+              onPanUpdate: (d) => setState(() {
+                resizeDx += d.delta.dx / scale;
+                resizeDy += d.delta.dy / scale;
+                resizeZone(p!, item, resizeOrigin!, resizeDx, resizeDy, corner);
+              }),
+              onPanEnd: (_) => persist(),
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: Center(
+                  child: Container(
+                    width: 18,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(
+                        color: const Color(0xff1565c0),
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }).toList();
+  }
+
   bool checkingUpdates = false;
   UpdateInfo? availableUpdate;
   Future<void> pending = Future.value();
@@ -1842,6 +1929,224 @@ class _HomeState extends State<Home> {
     }
   }
 
+  Future<void> adaptedPlacesEdit(Json table) async {
+    final draft = clone(table);
+    final places = adaptedPlaces(draft).map(clone).toList();
+    draft['adaptedPlaces'] = places;
+    String? error;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, update) {
+          final capacity = effectiveCapacity(p!, draft);
+          return AlertDialog(
+            title: Text('Places adaptées • ${table['label']}'),
+            content: SizedBox(
+              width: 520,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Réserver un emplacement pour un fauteuil. La largeur supplémentaire réduit la capacité : une place ordinaire utilise le repère de 60 cm. La profondeur réserve le dégagement des assises. Dimensions à ajuster à votre situation.',
+                    ),
+                    Text(
+                      '${table['capacity']} places déclarées → $capacity places utilisables ; ${occupancy(p!, table['id'])} personnes attribuées.',
+                    ),
+                    for (var index = 0; index < places.length; index++)
+                      Padding(
+                        key: ObjectKey(places[index]),
+                        padding: const EdgeInsets.only(top: 16),
+                        child: Column(
+                          children: [
+                            DropdownButtonFormField<int>(
+                              isExpanded: true,
+                              initialValue:
+                                  (places[index]['slot'] as int) < capacity
+                                  ? places[index]['slot']
+                                  : null,
+                              decoration: const InputDecoration(
+                                labelText: 'Emplacement sur la table',
+                              ),
+                              items: [
+                                for (var n = 0; n < capacity; n++)
+                                  DropdownMenuItem(
+                                    value: n,
+                                    child: Text('Place ${n + 1}'),
+                                  ),
+                              ],
+                              onChanged: (v) => places[index]['slot'] = v,
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextFormField(
+                                    initialValue: '${places[index]['width']}',
+                                    decoration: const InputDecoration(
+                                      labelText: 'Largeur (m)',
+                                    ),
+                                    onChanged: (v) => update(
+                                      () => places[index]['width'] = v,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextFormField(
+                                    initialValue: '${places[index]['depth']}',
+                                    decoration: const InputDecoration(
+                                      labelText: 'Profondeur (m)',
+                                    ),
+                                    onChanged: (v) => update(
+                                      () => places[index]['depth'] = v,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Retirer cet emplacement adapté',
+                                  icon: const Icon(Icons.delete_outline),
+                                  onPressed: () =>
+                                      update(() => places.removeAt(index)),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    TextButton.icon(
+                      icon: const Icon(Icons.add),
+                      label: const Text('Ajouter un emplacement adapté'),
+                      onPressed: capacity <= places.length
+                          ? null
+                          : () => update(() {
+                              final used = places.map((v) => v['slot']).toSet();
+                              places.add({
+                                'slot': List.generate(
+                                  capacity,
+                                  (i) => i,
+                                ).firstWhere((i) => !used.contains(i)),
+                                'width': .9,
+                                'depth': 1.2,
+                              });
+                            }),
+                    ),
+                    if (occupancy(p!, table['id']) > capacity)
+                      const Text(
+                        'La capacité sera dépassée : réattribuer les personnes après enregistrement.',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    if (error != null)
+                      Text(error!, style: const TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(c, false),
+                child: const Text('Annuler'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final slots = <int>{};
+                  for (final place in places) {
+                    final width = number(place['width'], double.nan),
+                        depth = number(place['depth'], double.nan);
+                    final slot = place['slot'] as int?;
+                    if (!width.isFinite ||
+                        width < .6 ||
+                        width > 3 ||
+                        !depth.isFinite ||
+                        depth < .55 ||
+                        depth > 3 ||
+                        slot == null ||
+                        slot < 0 ||
+                        slot >= capacity ||
+                        !slots.add(slot)) {
+                      update(
+                        () => error = 'Choisir des places distinctes utilisables, une largeur de 0,60 à 3 m et une profondeur de 0,55 à 3 m.',
+                      );
+                      return;
+                    }
+                    place['width'] = width;
+                    place['depth'] = depth;
+                  }
+                  Navigator.pop(c, true);
+                },
+                child: const Text('Enregistrer'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (accepted == true) change(() => table['adaptedPlaces'] = places);
+  }
+
+  Future<void> csvExport() async {
+    String section = 'Réservations';
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, update) => AlertDialog(
+          title: const Text('Exporter en CSV'),
+          content: SizedBox(
+            width: 360,
+            child: DropdownButtonFormField<String>(
+              initialValue: section,
+              decoration: const InputDecoration(labelText: 'Contenu'),
+              items: [
+                'Réservations',
+                'Attributions',
+                if (mealsEnabled(p!)) 'Totaux des repas',
+              ].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+              onChanged: (v) => update(() => section = v!),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Exporter'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (accepted != true || !mounted) return;
+    final captured = clone(p!);
+    final initial =
+        '${widget.store.directory}${Platform.pathSeparator}tableo-${section.toLowerCase().replaceAll(' ', '-')}.csv';
+    final path = await ask(
+      'Enregistrer le CSV',
+      initial,
+      label: 'Chemin complet',
+      browse: FileRequest(
+        title: 'Exporter en CSV',
+        initialPath: initial,
+        extension: 'csv',
+        description: 'Fichier CSV (*.csv)',
+        save: true,
+      ),
+    );
+    if (path == null) return;
+    try {
+      if (File(path).existsSync() &&
+          !await confirm('Remplacer le fichier ?', path)) {
+        return;
+      }
+      await File(path).writeAsString(eventCsv(captured, section));
+      toast('CSV enregistré : $path');
+    } catch (e) {
+      toast('Export impossible : $e');
+    }
+  }
+
   Future<void> anonymousSeats(Json g) async {
     final draft = clone(g);
     draft['seats'] = List<Json>.generate(
@@ -1857,19 +2162,25 @@ class _HomeState extends State<Home> {
             },
     );
     var revision = 0;
+    String? placementError;
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, update) => AlertDialog(
-          title: Text('Places anonymes • ${g['name']}'),
+          title: Text('Personnes et places • ${g['name']}'),
           content: SizedBox(
             width: 720,
             height: 460,
             child: Column(
               children: [
                 const Text(
-                  'Places anonymes, sans identité individuelle. Retirer une place réduit l’effectif et plafonne les quantités attribuées ; vérifier ensuite les tables.',
+                  'Les noms sont facultatifs. Les personnes suivent les quantités attribuées aux tables ; un emplacement peut être précisé après attribution. Retirer une place réduit l’effectif.',
                 ),
+                if (placementError != null)
+                  Text(
+                    placementError!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
                 const SizedBox(height: 12),
                 Expanded(
                   child: ListView.builder(
@@ -1918,6 +2229,117 @@ class _HomeState extends State<Home> {
                               ],
                             ),
                             const SizedBox(height: 6),
+                            TextFormField(
+                              key: ValueKey('person-name-$i'),
+                              initialValue: s['name'] ?? '',
+                              maxLength: 200,
+                              decoration: const InputDecoration(
+                                labelText: 'Nom de la personne (facultatif)',
+                              ),
+                              onChanged: (v) => s['name'] = v,
+                            ),
+                            const SizedBox(height: 8),
+                            Builder(
+                              builder: (_) {
+                                final choices = assignedTables(p!, g);
+                                if (choices.isEmpty) {
+                                  return const Text(
+                                    'Aucune table attribuée pour cette personne.',
+                                  );
+                                }
+                                final selectedTable = choices
+                                    .where((t) => t['id'] == s['table'])
+                                    .toList();
+                                final automatic =
+                                    assignedPeople(p!, g)[i]['table'] as Json?;
+                                final table = selectedTable.isNotEmpty
+                                    ? selectedTable.first
+                                    : automatic;
+                                final capacity = table == null
+                                    ? 0
+                                    : effectiveCapacity(p!, table);
+                                final slot =
+                                    table != null && s['table'] == table['id']
+                                    ? int.tryParse('${s['slot']}')
+                                    : null;
+                                return Column(
+                                  children: [
+                                    DropdownButtonFormField<String>(
+                                      isExpanded: true,
+                                      key: ValueKey(
+                                        'person-table-$i-${s['table']}',
+                                      ),
+                                      decoration: const InputDecoration(
+                                        labelText: 'Table de cette personne',
+                                      ),
+                                      initialValue: selectedTable.isEmpty
+                                          ? ''
+                                          : s['table'],
+                                      items: [
+                                        const DropdownMenuItem(
+                                          value: '',
+                                          child: Text('Automatique'),
+                                        ),
+                                        ...choices.map(
+                                          (t) => DropdownMenuItem(
+                                            value: t['id'] as String,
+                                            child: Text(t['label']),
+                                          ),
+                                        ),
+                                      ],
+                                      onChanged: (v) => update(() {
+                                        s.remove('slot');
+                                        if (v == '') {
+                                          s.remove('table');
+                                        } else {
+                                          s['table'] = v;
+                                        }
+                                      }),
+                                    ),
+                                    if (table != null) ...[
+                                      const SizedBox(height: 8),
+                                      DropdownButtonFormField<int>(
+                                        key: ValueKey(
+                                          'person-slot-$i-${table['id']}',
+                                        ),
+                                        decoration: InputDecoration(
+                                          labelText:
+                                              '${table['label']} : emplacement',
+                                        ),
+                                        initialValue:
+                                            slot != null &&
+                                                slot >= 0 &&
+                                                slot < capacity
+                                            ? slot
+                                            : -1,
+                                        items: [
+                                          const DropdownMenuItem(
+                                            value: -1,
+                                            child: Text('Automatique'),
+                                          ),
+                                          for (var n = 0; n < capacity; n++)
+                                            DropdownMenuItem(
+                                              value: n,
+                                              child: Text(
+                                                'Place ${n + 1}${adaptedPlaces(table).any((a) => a['slot'] == n) ? ' — adaptée' : ''}',
+                                              ),
+                                            ),
+                                        ],
+                                        onChanged: (v) {
+                                          if (v == -1) {
+                                            s.remove('slot');
+                                          } else {
+                                            s['table'] = table['id'];
+                                            s['slot'] = v;
+                                          }
+                                        },
+                                      ),
+                                    ],
+                                  ],
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 8),
                             Row(
                               children: [
                                 if (mealsEnabled(p!))
@@ -2001,7 +2423,26 @@ class _HomeState extends State<Home> {
               child: const Text('Annuler'),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(c, true),
+              onPressed: () {
+                final pinned = <String, int>{}, slots = <String>{};
+                for (final seat in (draft['seats'] as List).cast<Json>()) {
+                  final table = seat['table'];
+                  if (table == null) continue;
+                  pinned[table] = (pinned[table] ?? 0) + 1;
+                  final count = (draft['alloc'] as List)
+                      .where((a) => a['table'] == table)
+                      .fold<int>(0, (sum, a) => sum + (a['count'] as int));
+                  if (pinned[table]! > count ||
+                      seat['slot'] != null &&
+                          !slots.add('$table-${seat['slot']}')) {
+                    update(
+                      () => placementError = 'Choisir des places distinctes et respecter le nombre de personnes attribué à chaque table.',
+                    );
+                    return;
+                  }
+                }
+                Navigator.pop(c, true);
+              },
               child: const Text('Enregistrer'),
             ),
           ],
@@ -3156,7 +3597,9 @@ class _HomeState extends State<Home> {
           ),
           PopupMenuButton<String>(
             onSelected: (v) {
-              if (v == 'CSV') {
+              if (v == 'Exporter CSV') {
+                csvExport();
+              } else if (v == 'CSV') {
                 csvImport();
               } else {
                 fileAction(v);
@@ -3166,6 +3609,7 @@ class _HomeState extends State<Home> {
               'Exporter projet',
               'Importer projet',
               'Export PDF',
+              'Exporter CSV',
               'CSV',
             ].map((v) => PopupMenuItem(value: v, child: Text(v))).toList(),
             child: const Padding(
@@ -3463,6 +3907,7 @@ class _HomeState extends State<Home> {
   }
 
   Widget plan() {
+    selectedTables.removeWhere((id) => !tables(p!).any((t) => t['id'] == id));
     final geometry = PlanGeometry(p!, rows(p!, 'items'));
     final attributionRows = tableAssignments(p!, geometry);
     final conflicts = {
@@ -3472,6 +3917,9 @@ class _HomeState extends State<Home> {
     };
     final palette = planMarkerColors(p!);
     final markerNames = palette.keys.toList();
+    if (!{...planFilters, ...markerNames}.contains(planFilter)) {
+      planFilter = 'Toutes les tables';
+    }
     final markerColors = {
       for (final entry in palette.entries) entry.key: Color(entry.value),
     };
@@ -3569,6 +4017,8 @@ class _HomeState extends State<Home> {
                           child: MouseRegion(
                             onExit: (_) => cursorPosition.value = null,
                             child: Listener(
+                              onPointerDown: (_) => additiveClick =
+                                  HardwareKeyboard.instance.isControlPressed,
                               onPointerHover: (event) => cursorPosition.value =
                                   event.localPosition / scale,
                               onPointerMove: (event) => cursorPosition.value =
@@ -3616,13 +4066,62 @@ class _HomeState extends State<Home> {
                                           behavior: i['kind'] == 'zone'
                                               ? HitTestBehavior.opaque
                                               : HitTestBehavior.deferToChild,
-                                          onTap: () => setState(
-                                            () => selected = i['id'],
+                                          onTap: () => selectPlanItem(
+                                            i,
+                                            additive:
+                                                multiSelect || additiveClick,
                                           ),
                                           onDoubleTap: () => itemEdit(i),
                                           onPanStart: (_) {
+                                            dragBlocked = i['fixed'] == true;
                                             if (i['fixed'] != true) {
+                                              if (!selectedTables.contains(
+                                                i['id'],
+                                              )) {
+                                                selectPlanItem(i);
+                                              }
                                               selected = i['id'];
+                                              if (moveAssembly &&
+                                                  i['kind'] == 'table') {
+                                                final geo = PlanGeometry(
+                                                  p!,
+                                                  rows(p!, 'items'),
+                                                );
+                                                selectedTables.addAll(
+                                                  tables(p!)
+                                                      .where(
+                                                        (other) =>
+                                                            geo.sameAssembly(
+                                                              i,
+                                                              other,
+                                                            ),
+                                                      )
+                                                      .map(
+                                                        (other) =>
+                                                            other['id']
+                                                                as String,
+                                                      ),
+                                                );
+                                              }
+                                              draggingTables =
+                                                  i['kind'] == 'table'
+                                                  ? {...selectedTables}
+                                                  : {};
+                                              if (draggingTables.length > 1 &&
+                                                  tables(p!).any(
+                                                    (t) =>
+                                                        draggingTables.contains(
+                                                          t['id'],
+                                                        ) &&
+                                                        t['fixed'] == true,
+                                                  )) {
+                                                draggingTables.clear();
+                                                dragBlocked = true;
+                                                toast(
+                                                  'Déverrouiller les tables de cet ensemble.',
+                                                );
+                                                return;
+                                              }
                                               checkpoint();
                                               i.remove('unplacedByArrangement');
                                               dragX = number(i['x']);
@@ -3630,7 +4129,26 @@ class _HomeState extends State<Home> {
                                             }
                                           },
                                           onPanUpdate: (d) {
-                                            if (i['fixed'] == true) return;
+                                            if (i['fixed'] == true ||
+                                                dragBlocked) {
+                                              return;
+                                            }
+                                            if (draggingTables.length > 1) {
+                                              setState(
+                                                () => transformTableSelection(
+                                                  p!,
+                                                  draggingTables,
+                                                  dx: d.delta.dx / scale,
+                                                  dy: d.delta.dy / scale,
+                                                ),
+                                              );
+                                              return;
+                                            }
+                                            if (i['kind'] == 'table' &&
+                                                selectedTables.length > 1 &&
+                                                draggingTables.isEmpty) {
+                                              return;
+                                            }
                                             setState(() {
                                               i['x'] =
                                                   (dragX + d.delta.dx / scale)
@@ -3668,7 +4186,9 @@ class _HomeState extends State<Home> {
                                             });
                                           },
                                           onPanEnd: (_) {
-                                            if (i['fixed'] != true) {
+                                            if (dragBlocked) return;
+                                            if (i['fixed'] != true &&
+                                                draggingTables.length <= 1) {
                                               final snapped = snapToJoin(
                                                 p!,
                                                 i,
@@ -3681,238 +4201,261 @@ class _HomeState extends State<Home> {
                                             }
                                             persist();
                                           },
-                                          child: SizedBox(
-                                            width: number(i['w']) * scale,
-                                            height: number(i['h']) * scale,
-                                            child: CustomPaint(
-                                              painter: ItemPainter(
-                                                i,
-                                                i['id'] == selected,
-                                                conflict: conflicts.contains(
-                                                  i['id'],
-                                                ),
-                                                occupied: counts[i['id']] ?? 0,
-                                                capacity: i['kind'] == 'table'
-                                                    ? geometry.capacity(i)
-                                                    : 0,
-                                              ),
-                                              child: Stack(
-                                                clipBehavior: Clip.none,
-                                                children: [
-                                                  if (i['kind'] == 'table' &&
-                                                      showPlaceLabels)
-                                                    Positioned.fill(
-                                                      child: IgnorePointer(
-                                                        child: ValueListenableBuilder<Matrix4>(
-                                                          valueListenable:
-                                                              transform,
-                                                          builder:
-                                                              (
-                                                                _,
-                                                                matrix,
-                                                                child,
-                                                              ) => CustomPaint(
-                                                                painter: PlaceLabelsPainter(
-                                                                  i,
-                                                                  tablePlaceLabels(
-                                                                    p!,
-                                                                    i,
-                                                                    geometry,
-                                                                  ),
-                                                                  geometry.blocked[i['id']] ??
-                                                                      {},
-                                                                  scale,
-                                                                  scale *
-                                                                          matrix
-                                                                              .getMaxScaleOnAxis() >=
-                                                                      85,
-                                                                ),
-                                                              ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  if (i['kind'] == 'table')
-                                                    Positioned(
-                                                      bottom: 2,
-                                                      left: 3,
-                                                      right: 3,
-                                                      child: Wrap(
-                                                        spacing: 3,
-                                                        runSpacing: 2,
-                                                        children: [
-                                                          ...tableMarkers(
-                                                            p!,
-                                                            i['id'] as String,
-                                                          ).map(
-                                                            (name) => Tooltip(
-                                                              message: name,
-                                                              child: Container(
-                                                                width: 9,
-                                                                height: 9,
-                                                                decoration: BoxDecoration(
-                                                                  color:
-                                                                      markerColors[name],
-                                                                  shape: BoxShape
-                                                                      .circle,
-                                                                  border: Border.all(
-                                                                    color: Colors
-                                                                        .white,
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  if (i['kind'] == 'zone' &&
-                                                      i['id'] == selected &&
-                                                      i['fixed'] != true)
-                                                    ...[
-                                                      'top-left',
-                                                      'top-right',
-                                                      'bottom-left',
-                                                      'bottom-right',
-                                                    ].map(
-                                                      (corner) => Positioned(
-                                                        left:
-                                                            corner.contains(
-                                                              'left',
-                                                            )
-                                                            ? -7
-                                                            : null,
-                                                        right:
-                                                            corner.contains(
-                                                              'right',
-                                                            )
-                                                            ? -7
-                                                            : null,
-                                                        top:
-                                                            corner.contains(
-                                                              'top',
-                                                            )
-                                                            ? -7
-                                                            : null,
-                                                        bottom:
-                                                            corner.contains(
-                                                              'bottom',
-                                                            )
-                                                            ? -7
-                                                            : null,
-                                                        child: Tooltip(
-                                                          message: 'Redimensionner la zone',
-                                                          child: GestureDetector(
-                                                            key: ValueKey(
-                                                              'resize-${i['id']}-$corner',
-                                                            ),
-                                                            onPanStart: (_) {
-                                                              checkpoint();
-                                                              resizeOrigin =
-                                                                  clone(i);
-                                                              resizeDx =
-                                                                  resizeDy = 0;
-                                                            },
-                                                            onPanUpdate: (d) =>
-                                                                setState(() {
-                                                                  resizeDx +=
-                                                                      d
-                                                                          .delta
-                                                                          .dx /
-                                                                      scale;
-                                                                  resizeDy +=
-                                                                      d
-                                                                          .delta
-                                                                          .dy /
-                                                                      scale;
-                                                                  resizeZone(
-                                                                    p!,
-                                                                    i,
-                                                                    resizeOrigin!,
-                                                                    resizeDx,
-                                                                    resizeDy,
-                                                                    corner,
-                                                                  );
-                                                                }),
-                                                            onPanEnd: (_) =>
-                                                                persist(),
-                                                            child: Container(
-                                                              width: 18,
-                                                              height: 18,
-                                                              decoration: BoxDecoration(
-                                                                color: Colors
-                                                                    .white,
-                                                                border: Border.all(
-                                                                  color: Colors
-                                                                      .deepOrange,
-                                                                  width: 2,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  if (conflicts.contains(
+                                          child: Opacity(
+                                            opacity:
+                                                i['kind'] == 'table' &&
+                                                    !tableMatchesFilter(
+                                                      p!,
+                                                      i,
+                                                      planFilter,
+                                                      geometry,
+                                                    ) &&
+                                                    !conflicts.contains(i['id'])
+                                                ? .22
+                                                : 1,
+                                            child: SizedBox(
+                                              width: number(i['w']) * scale,
+                                              height: number(i['h']) * scale,
+                                              child: CustomPaint(
+                                                painter: ItemPainter(
+                                                  i,
+                                                  i['id'] == selected ||
+                                                      (i['kind'] == 'table' &&
+                                                          selectedTables
+                                                              .contains(
+                                                                i['id'],
+                                                              )),
+                                                  conflict: conflicts.contains(
                                                     i['id'],
-                                                  ))
-                                                    const Positioned(
-                                                      top: -12,
-                                                      right: -8,
-                                                      child: Tooltip(
-                                                        message: 'Conflit : chevauchement, dégagement ou limite de salle. Voir Contrôles.',
-                                                        child: Icon(
-                                                          Icons.warning_amber,
-                                                          color: Colors.red,
-                                                          size: 16,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  IgnorePointer(
-                                                    child: Center(
-                                                      child: Text(
-                                                        '${i['label']}${i['kind'] == 'table'
-                                                            ? i['capacity'] == 0
-                                                                  ? '\nService'
-                                                                  : '\n${counts[i['id']] ?? 0}/${geometry.capacity(i)}${unplacedTable(p!, i) ? '\nNon placée' : ''}'
-                                                            : ''}',
-                                                        textAlign:
-                                                            TextAlign.center,
-                                                        style: TextStyle(
-                                                          fontSize: max(
-                                                            8,
-                                                            min(12, scale * .2),
-                                                          ),
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          color:
-                                                              widget.darkMode &&
-                                                                  i['kind'] ==
-                                                                      'zone' &&
-                                                                  [
-                                                                    'Invisible',
-                                                                    'Contour seul',
-                                                                  ].contains(
-                                                                    i['zoneFill'],
-                                                                  )
-                                                              ? Theme.of(
-                                                                      context,
-                                                                    )
-                                                                    .colorScheme
-                                                                    .onSurface
-                                                              : const Color(
-                                                                  0xff123c38,
-                                                                ),
-                                                        ),
-                                                      ),
-                                                    ),
                                                   ),
-                                                ],
+                                                  occupied:
+                                                      counts[i['id']] ?? 0,
+                                                  capacity: i['kind'] == 'table'
+                                                      ? geometry.capacity(i)
+                                                      : 0,
+                                                ),
+                                                child: Stack(
+                                                  clipBehavior: Clip.none,
+                                                  children: [
+                                                    if (i['kind'] == 'table' &&
+                                                        showPlaceLabels)
+                                                      Positioned.fill(
+                                                        child: IgnorePointer(
+                                                          child: ValueListenableBuilder<Matrix4>(
+                                                            valueListenable:
+                                                                transform,
+                                                            builder:
+                                                                (
+                                                                  _,
+                                                                  matrix,
+                                                                  child,
+                                                                ) => CustomPaint(
+                                                                  painter: PlaceLabelsPainter(
+                                                                    i,
+                                                                    tablePlaceLabels(
+                                                                      p!,
+                                                                      i,
+                                                                      geometry,
+                                                                    ),
+                                                                    geometry.blocked[i['id']] ??
+                                                                        {},
+                                                                    scale,
+                                                                    scale * matrix.getMaxScaleOnAxis() >=
+                                                                        85,
+                                                                  ),
+                                                                ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    if (i['kind'] == 'table' &&
+                                                        adaptedPlaces(i)
+                                                            .isNotEmpty)
+                                                      ...adaptedPlaces(
+                                                        i,
+                                                      ).where((a) => a['slot'] < geometry.capacity(i)).map((
+                                                        a,
+                                                      ) {
+                                                        final points =
+                                                            placeLabelPositions(
+                                                              i,
+                                                              geometry.capacity(
+                                                                i,
+                                                              ),
+                                                              geometry.blocked[i['id']] ??
+                                                                  {},
+                                                            );
+                                                        if (a['slot'] >=
+                                                            points.length) {
+                                                          return const SizedBox.shrink();
+                                                        }
+                                                        final point =
+                                                            points[a['slot']];
+                                                        return Positioned(
+                                                          left:
+                                                              (point.x * scale -
+                                                                      7)
+                                                                  .clamp(
+                                                                    0,
+                                                                    max(
+                                                                      0,
+                                                                      number(i['w']) *
+                                                                              scale -
+                                                                          14,
+                                                                    ),
+                                                                  ),
+                                                          top: (point.y * scale - 7).clamp(
+                                                            0,
+                                                            max(
+                                                              0,
+                                                              number(i['h']) *
+                                                                      scale -
+                                                                  14,
+                                                            ),
+                                                          ),
+                                                          child: Tooltip(
+                                                            message:
+                                                                'Place ${a['slot'] + 1} adaptée : ${a['width']} × ${a['depth']} m',
+                                                            child: const Icon(
+                                                              Icons.accessible,
+                                                              color: Color(
+                                                                0xff1565c0,
+                                                              ),
+                                                              size: 14,
+                                                            ),
+                                                          ),
+                                                        );
+                                                      }),
+                                                    if (i['kind'] == 'table')
+                                                      Positioned(
+                                                        bottom: 2,
+                                                        left: 3,
+                                                        right: 3,
+                                                        child: Wrap(
+                                                          spacing: 3,
+                                                          runSpacing: 2,
+                                                          children: [
+                                                            ...tableMarkers(
+                                                              p!,
+                                                              i['id'] as String,
+                                                            ).map(
+                                                              (name) => Tooltip(
+                                                                message: name,
+                                                                child: Container(
+                                                                  width: 9,
+                                                                  height: 9,
+                                                                  decoration: BoxDecoration(
+                                                                    color:
+                                                                        markerColors[name],
+                                                                    shape: BoxShape
+                                                                        .circle,
+                                                                    border: Border.all(
+                                                                      color: Colors
+                                                                          .white,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    if (conflicts.contains(
+                                                      i['id'],
+                                                    ))
+                                                      const Positioned(
+                                                        top: -12,
+                                                        right: -8,
+                                                        child: Tooltip(
+                                                          message: 'Conflit : chevauchement, dégagement ou limite de salle. Voir Contrôles.',
+                                                          child: Icon(
+                                                            Icons.warning_amber,
+                                                            color: Colors.red,
+                                                            size: 16,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    IgnorePointer(
+                                                      child: Center(
+                                                        child: Text(
+                                                          '${i['label']}${i['kind'] == 'table'
+                                                              ? i['capacity'] == 0
+                                                                    ? '\nService'
+                                                                    : '\n${counts[i['id']] ?? 0}/${geometry.capacity(i)}${unplacedTable(p!, i) ? '\nNon placée' : ''}'
+                                                              : ''}',
+                                                          textAlign:
+                                                              TextAlign.center,
+                                                          style: TextStyle(
+                                                            fontSize: max(
+                                                              8,
+                                                              min(
+                                                                12,
+                                                                scale * .2,
+                                                              ),
+                                                            ),
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            color:
+                                                                widget.darkMode &&
+                                                                    i['kind'] ==
+                                                                        'zone' &&
+                                                                    [
+                                                                      'Invisible',
+                                                                      'Contour seul',
+                                                                    ].contains(
+                                                                      i['zoneFill'],
+                                                                    )
+                                                                ? Theme.of(
+                                                                        context,
+                                                                      )
+                                                                      .colorScheme
+                                                                      .onSurface
+                                                                : const Color(
+                                                                    0xff123c38,
+                                                                  ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
                                             ),
                                           ),
                                         ),
                                       ),
                                     ),
+                                    if (t != null &&
+                                        t['kind'] == 'zone' &&
+                                        t['fixed'] != true &&
+                                        !measuring)
+                                      ...zoneHandles(t, scale),
+                                    if (measuring)
+                                      Positioned.fill(
+                                        child: GestureDetector(
+                                          key: const ValueKey(
+                                            'distance-overlay',
+                                          ),
+                                          behavior: HitTestBehavior.opaque,
+                                          onTapDown: (details) => setState(() {
+                                            final point =
+                                                details.localPosition / scale;
+                                            if (measureStart == null ||
+                                                measureEnd != null) {
+                                              measureStart = point;
+                                              measureEnd = null;
+                                            } else {
+                                              measureEnd = point;
+                                            }
+                                          }),
+                                          child: CustomPaint(
+                                            painter: DistancePainter(
+                                              measureStart,
+                                              measureEnd,
+                                              scale,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ),
@@ -3930,15 +4473,95 @@ class _HomeState extends State<Home> {
                   padding: const EdgeInsets.fromLTRB(10, 0, 20, 16),
                   child: ListView(
                     key: const ValueKey('plan-sidebar'),
+                    scrollCacheExtent: const ScrollCacheExtent.pixels(2000),
                     children: [
                       CheckboxListTile(
                         contentPadding: EdgeInsets.zero,
                         title: const Text('Afficher les groupes par place'),
                         subtitle: const Text(
-                          'Référent répété par personne attribuée. Zoomer pour lire les noms.',
+                          'Nom individuel ou référent. Zoomer pour lire.',
                         ),
                         value: showPlaceLabels,
                         onChanged: (v) => setState(() => showPlaceLabels = v!),
+                      ),
+                      ExpansionTile(
+                        title: const Text('Sélection, filtres et mesure'),
+                        tilePadding: EdgeInsets.zero,
+                        children: [
+                          DropdownButtonFormField<String>(
+                            key: ValueKey('filter-$planFilter'),
+                            initialValue: planFilter,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Mettre en évidence',
+                            ),
+                            items: {...planFilters, ...markerNames}
+                                .map(
+                                  (v) => DropdownMenuItem(
+                                    value: v,
+                                    child: Text(v),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) => setState(() => planFilter = v!),
+                          ),
+                          CheckboxListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Sélection multiple'),
+                            subtitle: const Text(
+                              'Cliquer les tables à ajouter ou retirer. Ctrl + clic fonctionne aussi.',
+                            ),
+                            value: multiSelect,
+                            onChanged: (v) => setState(() => multiSelect = v!),
+                          ),
+                          CheckboxListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text(
+                              'Déplacer les tables accolées ensemble',
+                            ),
+                            value: moveAssembly,
+                            onChanged: (v) => setState(() => moveAssembly = v!),
+                          ),
+                          if (selectedTables.length > 1) ...[
+                            Text(
+                              '${selectedTables.length} tables sélectionnées — glisser une table pour déplacer l’ensemble.',
+                            ),
+                            OutlinedButton(
+                              onPressed: () {
+                                try {
+                                  change(
+                                    () => transformTableSelection(
+                                      p!,
+                                      selectedTables,
+                                      rotate: true,
+                                    ),
+                                  );
+                                } on FormatException catch (e) {
+                                  toast(e.message.toString());
+                                }
+                              },
+                              child: const Text('Pivoter la sélection 90°'),
+                            ),
+                          ],
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.straighten),
+                            label: Text(
+                              measuring
+                                  ? 'Terminer la mesure'
+                                  : 'Mesurer une distance',
+                            ),
+                            onPressed: () => setState(() {
+                              measuring = !measuring;
+                              measureStart = measureEnd = null;
+                            }),
+                          ),
+                          if (measuring)
+                            Text(
+                              measureEnd == null
+                                  ? 'Cliquer deux points du plan. Un troisième clic recommence.'
+                                  : 'Distance : ${(measureEnd! - measureStart!).distance.toStringAsFixed(2)} m',
+                            ),
+                        ],
                       ),
                       DropdownButtonFormField<String>(
                         isExpanded: true,
@@ -4055,6 +4678,12 @@ class _HomeState extends State<Home> {
                           value: t['fixed'] == true,
                           onChanged: (v) => change(() => t['fixed'] = v),
                         ),
+                        if (t['kind'] == 'table' && t['capacity'] > 0)
+                          OutlinedButton.icon(
+                            onPressed: () => adaptedPlacesEdit(t),
+                            icon: const Icon(Icons.accessible),
+                            label: const Text('Places adaptées'),
+                          ),
                         OutlinedButton(
                           onPressed: () => itemEdit(t),
                           child: const Text('Modifier'),
@@ -4830,6 +5459,48 @@ class GridPainter extends CustomPainter {
       old.scale != scale || old.polygon.toString() != polygon.toString();
 }
 
+class DistancePainter extends CustomPainter {
+  final Offset? start, end;
+  final double scale;
+  DistancePainter(this.start, this.end, this.scale);
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (start == null) return;
+    final paint = Paint()
+      ..color = const Color(0xff1565c0)
+      ..strokeWidth = 2;
+    canvas.drawCircle(start! * scale, 5, paint);
+    if (end == null) return;
+    canvas.drawCircle(end! * scale, 5, paint);
+    canvas.drawLine(start! * scale, end! * scale, paint);
+    final text = TextPainter(
+      text: TextSpan(
+        text: '${(end! - start!).distance.toStringAsFixed(2)} m',
+        style: const TextStyle(
+          color: Color(0xff123c38),
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final center = (start! + end!) * scale / 2;
+    final rect = Rect.fromCenter(
+      center: center,
+      width: text.width + 12,
+      height: text.height + 8,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, const Radius.circular(4)),
+      Paint()..color = Colors.white,
+    );
+    text.paint(canvas, rect.topLeft + const Offset(6, 4));
+  }
+
+  @override
+  bool shouldRepaint(DistancePainter oldDelegate) => true;
+}
+
 class ItemPainter extends CustomPainter {
   final Json item;
   final bool selected;
@@ -4844,7 +5515,11 @@ class ItemPainter extends CustomPainter {
   });
   @override
   void paint(Canvas c, Size s) {
-    if (item['kind'] == 'zone' && item['zoneFill'] == 'Invisible') return;
+    if (item['kind'] == 'zone' &&
+        item['zoneFill'] == 'Invisible' &&
+        !selected) {
+      return;
+    }
     final color = item['unplacedByArrangement'] == true && conflict
         ? const Color(0xffffcccc)
         : switch (item['kind']) {
@@ -4866,12 +5541,14 @@ class ItemPainter extends CustomPainter {
         ? item['zoneFill'] ?? 'Plein'
         : 'Plein';
     final fill = Paint()
-      ..color = style == 'Contour seul' ? Colors.transparent : color;
+      ..color = ['Contour seul', 'Invisible'].contains(style)
+          ? Colors.transparent
+          : color;
     final border = Paint()
       ..color = conflict
           ? Colors.red
           : selected
-          ? Colors.deepOrange
+          ? const Color(0xff1565c0)
           : item['kind'] == 'zone' && style == 'Contour seul'
           ? Color.lerp(color, Colors.black, .35)!
           : const Color(0xff527567)
@@ -4922,6 +5599,18 @@ class ItemPainter extends CustomPainter {
         }
       }
       c.restore();
+    }
+    if (selected && conflict) {
+      c.drawRRect(
+        RRect.fromRectAndRadius(
+          (Offset.zero & s).inflate(4),
+          const Radius.circular(6),
+        ),
+        Paint()
+          ..color = const Color(0xff1565c0)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2,
+      );
     }
   }
 

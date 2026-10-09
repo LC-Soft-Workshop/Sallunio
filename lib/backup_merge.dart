@@ -255,6 +255,15 @@ class BackupMergePlan {
       ];
       copy['reserved'] =
           itemIds[reference(entry.source, copy['reserved'])] ?? '';
+      for (final seat in (copy['seats'] as List? ?? []).cast<Json>()) {
+        final mapped = itemIds[reference(entry.source, seat['table'])];
+        if (mapped == null) {
+          seat.remove('table');
+          seat.remove('slot');
+        } else {
+          seat['table'] = mapped;
+        }
+      }
       copy['separate'] =
           groupIds[reference(entry.source, copy['separate'])] ?? '';
       copy['proximity'] = {

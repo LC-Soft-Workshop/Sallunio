@@ -93,6 +93,15 @@ Json injectEventBackup(
               {...allocation, 'table': itemIds[allocation['table']]},
         ];
         copy['reserved'] = itemIds[group['reserved']] ?? '';
+        for (final seat in (copy['seats'] as List? ?? []).cast<Json>()) {
+          final mapped = itemIds[seat['table']];
+          if (mapped == null) {
+            seat.remove('table');
+            seat.remove('slot');
+          } else {
+            seat['table'] = mapped;
+          }
+        }
         copy['separate'] = groupIds[group['separate']] ?? '';
         copy['proximity'] = {
           for (final entry in (group['proximity'] as Map? ?? {}).entries)

@@ -3,6 +3,18 @@
 Historique en français, établi à partir des validations conservées du projet.
 Les anciennes versions ne constituent pas des livraisons GitHub rétroactives.
 
+## 1.0.39
+
+- Places adaptées configurables sur chaque table : emplacement numéroté, largeur et profondeur, réduction explicite de la capacité et signalement des besoins non couverts. Repère d'organisation à vérifier sur place.
+- Sélection de plusieurs tables par Ctrl + clic ou case dédiée ; déplacement et rotation rigides de la sélection. Option pour déplacer les tables accolées ensemble, en respectant les verrouillages. Opérations annulables.
+- Outil de mesure temporaire entre deux points du plan, en mètres, sans modifier l'événement ni les exports.
+- Noms individuels facultatifs dans les réservations, en conservant le fonctionnement par groupes et effectifs. Choix d'un emplacement après attribution, repère des fauteuils et vérification de l'accompagnant.
+- Filtres visuels pour les tables vides, places disponibles, mobilité, allergies et repas. Les autres tables sont atténuées ; les conflits restent visibles.
+- Exports CSV des réservations, attributions et totaux des repas depuis Fichiers. Les notes internes et préférences privées de proximité sont exclues.
+- Sélection bleue distincte des conflits rouges, y compris pour les zones invisibles sélectionnées.
+- Poignées de redimensionnement des zones utilisables sur toute leur surface, même dans la moitié dépassant de la zone.
+- Conservation des noms, réglages adaptés et références des emplacements lors des sauvegardes et imports.
+
 ## 1.0.38
 
 - Ajout des modes clair et sombre, avec un bouton soleil/lune en haut à droite de l'application, disponible même sans événement ouvert.

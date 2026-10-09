@@ -21,6 +21,8 @@ Ce lien télécharge toujours la dernière version publiée.
   liste d'accueil et fiche cuisine/service.
 - Sauvegarde et restauration d'événements, import de mobilier ou réservations dans l'événement courant.
 - Annuler/rétablir, notes d'organisation et contrôles de préparation.
+- Sélection multiple, déplacement des ensembles accolés, mesure en mètres et filtres visuels du plan.
+- Places adaptées configurables, noms individuels facultatifs et exports CSV des réservations, attributions et repas.
 
 Les préférences privées de proximité entre groupes restent dans les réservations
 et ne sont jamais imprimées dans les PDF.
