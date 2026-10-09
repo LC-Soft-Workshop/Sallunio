@@ -27,6 +27,8 @@ String defaultDataDirectory({Map<String, String>? environment}) {
 
 class Store {
   bool demoOnEmpty = true;
+  bool darkMode = false;
+  bool _opened = false;
   late Database db;
   late String directory;
   Future<void> open({String? path}) async {
@@ -53,6 +55,23 @@ class Store {
       whereArgs: ['demo_on_empty'],
     );
     demoOnEmpty = state.isEmpty || state.first['value'] != '0';
+    final theme = await db.query(
+      'app_state',
+      where: 'key = ?',
+      whereArgs: ['dark_mode'],
+    );
+    darkMode = theme.isNotEmpty && theme.first['value'] == '1';
+    _opened = true;
+  }
+
+  Future<void> saveDarkMode(bool value) async {
+    if (_opened) {
+      await db.insert('app_state', {
+        'key': 'dark_mode',
+        'value': value ? '1' : '0',
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    darkMode = value;
   }
 
   Future<List<Json>> load() async => (await db.query(
@@ -92,5 +111,8 @@ class Store {
         }
       });
 
-  Future<void> close() => db.close();
+  Future<void> close() async {
+    await db.close();
+    _opened = false;
+  }
 }

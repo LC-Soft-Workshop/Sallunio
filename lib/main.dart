@@ -106,7 +106,7 @@ void main(List<String> args) async {
   }
 }
 
-class Tableo extends StatelessWidget {
+class Tableo extends StatefulWidget {
   final Store store;
   final FileDialogs? fileDialogs;
   final UpdateService? updateService;
@@ -119,23 +119,71 @@ class Tableo extends StatelessWidget {
     this.linkOpener,
   });
   @override
+  State<Tableo> createState() => _TableoState();
+}
+
+class _TableoState extends State<Tableo> {
+  late bool darkMode;
+  bool savingTheme = false;
+  final messenger = GlobalKey<ScaffoldMessengerState>();
+  @override
+  void initState() {
+    super.initState();
+    darkMode = widget.store.darkMode;
+  }
+
+  Future<void> toggleTheme() async {
+    if (savingTheme) return;
+    final previous = darkMode;
+    setState(() {
+      darkMode = !darkMode;
+      savingTheme = true;
+    });
+    try {
+      await widget.store.saveDarkMode(darkMode);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => darkMode = previous);
+      messenger.currentState?.showSnackBar(
+        const SnackBar(
+          content: Text('Le choix du thème n’a pas pu être enregistré.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => savingTheme = false);
+    }
+  }
+
+  ThemeData appTheme(Brightness brightness) => ThemeData(
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: const Color(0xff176b64),
+      brightness: brightness,
+    ),
+    useMaterial3: true,
+    scaffoldBackgroundColor: brightness == Brightness.dark
+        ? const Color(0xff141c19)
+        : const Color(0xfff3f5f4),
+    inputDecorationTheme: const InputDecorationTheme(
+      border: OutlineInputBorder(),
+      isDense: true,
+    ),
+  );
+
+  @override
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
     title: 'Tableo',
-    theme: ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff176b64)),
-      useMaterial3: true,
-      scaffoldBackgroundColor: const Color(0xfff3f5f4),
-      inputDecorationTheme: const InputDecorationTheme(
-        border: OutlineInputBorder(),
-        isDense: true,
-      ),
-    ),
+    scaffoldMessengerKey: messenger,
+    theme: appTheme(Brightness.light),
+    darkTheme: appTheme(Brightness.dark),
+    themeMode: darkMode ? ThemeMode.dark : ThemeMode.light,
     home: Home(
-      store: store,
-      fileDialogs: fileDialogs,
-      updateService: updateService,
-      linkOpener: linkOpener,
+      store: widget.store,
+      fileDialogs: widget.fileDialogs,
+      updateService: widget.updateService,
+      linkOpener: widget.linkOpener,
+      darkMode: darkMode,
+      onToggleTheme: savingTheme ? null : toggleTheme,
     ),
   );
 }
@@ -145,18 +193,35 @@ class Home extends StatefulWidget {
   final FileDialogs? fileDialogs;
   final UpdateService? updateService;
   final LinkOpener? linkOpener;
+  final bool darkMode;
+  final VoidCallback? onToggleTheme;
   const Home({
     super.key,
     required this.store,
     this.fileDialogs,
     this.updateService,
     this.linkOpener,
+    this.darkMode = false,
+    this.onToggleTheme,
   });
   @override
   State<Home> createState() => _HomeState();
 }
 
 class _HomeState extends State<Home> {
+  Widget themeButton() => IconButton(
+    tooltip: widget.darkMode ? 'Passer au mode clair' : 'Passer au mode sombre',
+    onPressed: widget.onToggleTheme,
+    icon: Icon(
+      widget.darkMode ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
+    ),
+  );
+
+  Color surfaceFor(Color light, {bool elevated = false}) => widget.darkMode
+      ? elevated
+            ? Theme.of(context).colorScheme.surfaceContainerHighest
+            : Theme.of(context).colorScheme.surfaceContainerLow
+      : light;
   List<Json> projects = [];
   Json? p;
   String? selected;
@@ -891,35 +956,38 @@ class _HomeState extends State<Home> {
                           color: Colors.white,
                           border: Border.all(color: Colors.grey),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Table 1',
-                              style: TextStyle(fontSize: 26),
-                            ),
-                            const Text('6 places utilisables'),
-                            const SizedBox(height: 16),
-                            const Text('Référent exemple : 6 places'),
-                            const SizedBox(height: 14),
-                            if (logo != null)
-                              Center(
-                                child: Image.memory(
-                                  logo!,
-                                  height: 60,
-                                  fit: BoxFit.contain,
+                        child: DefaultTextStyle.merge(
+                          style: const TextStyle(color: Color(0xff123c38)),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Table 1',
+                                style: TextStyle(fontSize: 26),
+                              ),
+                              const Text('6 places utilisables'),
+                              const SizedBox(height: 16),
+                              const Text('Référent exemple : 6 places'),
+                              const SizedBox(height: 14),
+                              if (logo != null)
+                                Center(
+                                  child: Image.memory(
+                                    logo!,
+                                    height: 60,
+                                    fit: BoxFit.contain,
+                                  ),
                                 ),
-                              ),
-                            if (logo != null && phrase.text.trim().isNotEmpty)
-                              const SizedBox(height: 8),
-                            if (phrase.text.trim().isNotEmpty)
-                              Text(
-                                phrase.text.trim(),
-                                textAlign: TextAlign.center,
-                                maxLines: 5,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                          ],
+                              if (logo != null && phrase.text.trim().isNotEmpty)
+                                const SizedBox(height: 8),
+                              if (phrase.text.trim().isNotEmpty)
+                                Text(
+                                  phrase.text.trim(),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 5,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -1266,7 +1334,7 @@ class _HomeState extends State<Home> {
   Widget workspaceCounters(Json stats) => Container(
     width: double.infinity,
     padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
-    color: const Color(0xffeaf0ed),
+    color: surfaceFor(const Color(0xffeaf0ed)),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1307,7 +1375,7 @@ class _HomeState extends State<Home> {
                       width: width,
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: surfaceFor(Colors.white, elevated: true),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Column(
@@ -2976,7 +3044,7 @@ class _HomeState extends State<Home> {
     if (p == null) {
       if (loaded) {
         return Scaffold(
-          appBar: AppBar(title: const Text('Tableo')),
+          appBar: AppBar(title: const Text('Tableo'), actions: [themeButton()]),
           bottomNavigationBar: Padding(
             padding: const EdgeInsets.all(8),
             child: Row(
@@ -3005,7 +3073,10 @@ class _HomeState extends State<Home> {
           ),
         );
       }
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        appBar: AppBar(title: const Text('Tableo'), actions: [themeButton()]),
+        body: const Center(child: CircularProgressIndicator()),
+      );
     }
     final alerts = issues(p!);
     final geometry = PlanGeometry(p!, rows(p!, 'items'));
@@ -3102,6 +3173,7 @@ class _HomeState extends State<Home> {
               child: Text('Fichiers ▾'),
             ),
           ),
+          themeButton(),
         ],
       ),
       body: Row(
@@ -3182,7 +3254,7 @@ class _HomeState extends State<Home> {
         ],
       ),
       bottomNavigationBar: Container(
-        color: const Color(0xffe7eeeb),
+        color: surfaceFor(const Color(0xffe7eeeb)),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         child: Row(
           children: [
@@ -3475,7 +3547,7 @@ class _HomeState extends State<Home> {
                   margin: const EdgeInsets.fromLTRB(20, 0, 10, 16),
                   clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
-                    color: const Color(0xffe4ebe7),
+                    color: surfaceFor(const Color(0xffe4ebe7), elevated: true),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: LayoutBuilder(
@@ -3516,6 +3588,7 @@ class _HomeState extends State<Home> {
                                         painter: GridPainter(
                                           scale,
                                           roomPolygon(room),
+                                          dark: widget.darkMode,
                                         ),
                                       ),
                                     ),
@@ -3811,9 +3884,24 @@ class _HomeState extends State<Home> {
                                                           ),
                                                           fontWeight:
                                                               FontWeight.bold,
-                                                          color: const Color(
-                                                            0xff123c38,
-                                                          ),
+                                                          color:
+                                                              widget.darkMode &&
+                                                                  i['kind'] ==
+                                                                      'zone' &&
+                                                                  [
+                                                                    'Invisible',
+                                                                    'Contour seul',
+                                                                  ].contains(
+                                                                    i['zoneFill'],
+                                                                  )
+                                                              ? Theme.of(
+                                                                      context,
+                                                                    )
+                                                                    .colorScheme
+                                                                    .onSurface
+                                                              : const Color(
+                                                                  0xff123c38,
+                                                                ),
                                                         ),
                                                       ),
                                                     ),
@@ -4686,12 +4774,16 @@ class _HomeState extends State<Home> {
 class GridPainter extends CustomPainter {
   final double scale;
   final List<Point<double>> polygon;
-  GridPainter(this.scale, this.polygon);
+  final bool dark;
+  GridPainter(this.scale, this.polygon, {this.dark = false});
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(Offset.zero & size, Paint()..color = Colors.white);
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = dark ? const Color(0xff1c2623) : Colors.white,
+    );
     final line = Paint()
-      ..color = const Color(0xffe5ebe7)
+      ..color = dark ? const Color(0xff34493f) : const Color(0xffe5ebe7)
       ..strokeWidth = 1;
     for (var x = 0.0; x <= size.width; x += scale) {
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), line);
@@ -4702,7 +4794,7 @@ class GridPainter extends CustomPainter {
     canvas.drawRect(
       Offset.zero & size,
       Paint()
-        ..color = const Color(0xff536a61)
+        ..color = dark ? const Color(0xff91ad9e) : const Color(0xff536a61)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2,
     );
@@ -4718,11 +4810,15 @@ class GridPainter extends CustomPainter {
         Path()..addRect(Offset.zero & size),
         contour,
       );
-      canvas.drawPath(outside, Paint()..color = const Color(0xffbdc8c1));
+      canvas.drawPath(
+        outside,
+        Paint()
+          ..color = dark ? const Color(0xff101613) : const Color(0xffbdc8c1),
+      );
       canvas.drawPath(
         contour,
         Paint()
-          ..color = const Color(0xff536a61)
+          ..color = dark ? const Color(0xff91ad9e) : const Color(0xff536a61)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2,
       );

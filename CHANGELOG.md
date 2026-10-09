@@ -3,6 +3,14 @@
 Historique en français, établi à partir des validations conservées du projet.
 Les anciennes versions ne constituent pas des livraisons GitHub rétroactives.
 
+## 1.0.38
+
+- Ajout des modes clair et sombre, avec un bouton soleil/lune en haut à droite de l'application, disponible même sans événement ouvert.
+- Choix du thème mémorisé localement et repris au prochain lancement, séparément des données des événements.
+- Adaptation des menus, dialogues, compteurs, panneaux et arrière-plans du plan pour conserver leur lisibilité en mode sombre.
+- Conservation des repères de couleur des tables et d'un aperçu de fiche sur fond de papier clair. Les exports PDF gardent leur présentation imprimable.
+- La bascule conserve la page courante, la disposition et les attributions.
+
 ## 1.0.37
 
 - Le repère indicatif de confort de 60 cm par place reste une information de préparation, avant comme après attribution des groupes. Il ne devient plus une alerte lorsque la capacité définie est respectée.
