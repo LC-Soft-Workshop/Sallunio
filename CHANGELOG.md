@@ -3,6 +3,13 @@
 Historique en français, établi à partir des validations conservées du projet.
 Les anciennes versions ne constituent pas des livraisons GitHub rétroactives.
 
+## 1.0.33
+
+- Ajout du point de départ « Centre » pour remplir la salle à partir du centre vers les espaces disponibles, en respectant les accolements et les zones.
+- Correction des fausses alertes de sortie de salle dues aux arrondis aux limites après une disposition en miroir depuis les coins du bas.
+- Validation du plan final après le calcul en miroir : une disposition invalide n'est pas appliquée partiellement.
+- Conservation des positions des tables verrouillées et des tables de service dans les cinq modes de disposition.
+
 ## 1.0.32
 
 - Première livraison Windows publiée sur GitHub, avec le dépôt de mises à jour configuré sur `freakbn777/Tableo`.

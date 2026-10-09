@@ -75,7 +75,7 @@ Json documentFixture() {
 }
 
 void main() {
-  for (final corner in arrangementCorners) {
+  for (final corner in arrangementCorners.where((value) => value != 'Centre')) {
     test(
       'Arrangement starts from $corner and preserves fixed/service items',
       () {

@@ -556,10 +556,11 @@ bool fits(
       PlanGeometry(p, [...others.where((i) => i['id'] != a['id']), a]);
   final e = geo.bounds(a), room = p['room'] as Json;
   if (!polygonFits(e, room)) return false;
-  if (number(e['x']) < 0 ||
-      number(e['y']) < 0 ||
-      number(e['x']) + number(e['w']) > number(room['width']) ||
-      number(e['y']) + number(e['h']) > number(room['height'])) {
+  const epsilon = .0000001;
+  if (number(e['x']) < -epsilon ||
+      number(e['y']) < -epsilon ||
+      number(e['x']) + number(e['w']) > number(room['width']) + epsilon ||
+      number(e['y']) + number(e['h']) > number(room['height']) + epsilon) {
     return false;
   }
   return !others
@@ -737,6 +738,7 @@ Json? findPosition(
   Json item,
   List<Json> others, {
   bool fromCorner = false,
+  bool fromCenter = false,
 }) {
   final width = number(p['room']['width']),
       height = number(p['room']['height']);
@@ -762,6 +764,16 @@ Json? findPosition(
     start = max(start, right);
   }
   if (start < width) regions.add((start, width));
+  Json? nearest;
+  double distance(Json candidate) =>
+      pow(
+        number(candidate['x']) + number(candidate['w']) / 2 - width / 2,
+        2,
+      ).toDouble() +
+      pow(
+        number(candidate['y']) + number(candidate['h']) / 2 - height / 2,
+        2,
+      ).toDouble();
   for (final region in regions) {
     final candidate = _findPositionInRegion(
       p,
@@ -770,10 +782,16 @@ Json? findPosition(
       region.$1,
       region.$2,
       fromCorner: fromCorner,
+      fromCenter: fromCenter,
     );
-    if (candidate != null) return candidate;
+    if (candidate != null) {
+      if (!fromCenter) return candidate;
+      if (nearest == null || distance(candidate) < distance(nearest)) {
+        nearest = candidate;
+      }
+    }
   }
-  return null;
+  return nearest;
 }
 
 Json? _findPositionInRegion(
@@ -783,6 +801,7 @@ Json? _findPositionInRegion(
   double minX,
   double maxX, {
   bool fromCorner = false,
+  bool fromCenter = false,
 }) {
   final baseGeometry = PlanGeometry(
     p,
@@ -847,6 +866,23 @@ Json? _findPositionInRegion(
     }
   }
   contacts.sort((a, b) {
+    if (fromCenter) {
+      double distance(Json c) =>
+          pow(
+            number(c['x']) +
+                number(c['w']) / 2 -
+                number(p['room']['width']) / 2,
+            2,
+          ).toDouble() +
+          pow(
+            number(c['y']) +
+                number(c['h']) / 2 -
+                number(p['room']['height']) / 2,
+            2,
+          ).toDouble();
+      final proximity = distance(a).compareTo(distance(b));
+      if (proximity != 0) return proximity;
+    }
     final vertical = number(item['h']) > number(item['w']);
     final primary = number(a[vertical ? 'x' : 'y'])
         .compareTo(number(b[vertical ? 'x' : 'y']));
@@ -856,6 +892,40 @@ Json? _findPositionInRegion(
               .compareTo(number(b[vertical ? 'y' : 'x']));
   });
   if (contacts.isNotEmpty) return contacts.first;
+  if (fromCenter) {
+    final width = number(p['room']['width']),
+        height = number(p['room']['height']);
+    final w = number(item['w']), h = number(item['h']);
+    final xs = <double>{(width - w) / 2}, ys = <double>{(height - h) / 2};
+    for (var x = max(.6, minX); x + w <= maxX + .000001; x += .2) {
+      xs.add(x);
+    }
+    for (var y = .6; y + h <= height; y += .2) {
+      ys.add(y);
+    }
+    if (wallSides(p).contains('left')) xs.add(0);
+    if (wallSides(p).contains('right')) xs.add(width - w);
+    if (wallSides(p).contains('top')) ys.add(0);
+    if (wallSides(p).contains('bottom')) ys.add(height - h);
+    final points = [
+      for (final x in xs)
+        for (final y in ys) (x, y),
+    ];
+    double distance((double, double) point) =>
+        pow(point.$1 + w / 2 - width / 2, 2).toDouble() +
+        pow(point.$2 + h / 2 - height / 2, 2).toDouble();
+    points.sort((a, b) {
+      final d = distance(a).compareTo(distance(b));
+      if (d != 0) return d;
+      final y = a.$2.compareTo(b.$2);
+      return y != 0 ? y : a.$1.compareTo(b.$1);
+    });
+    for (final point in points) {
+      final candidate = {...item, 'x': point.$1, 'y': point.$2};
+      if (valid(candidate)) return candidate;
+    }
+    return null;
+  }
   for (final edge in wallSides(p)) {
     if (fromCorner && edge != 'left' && edge != 'top') continue;
     for (
@@ -1266,6 +1336,7 @@ const arrangementCorners = [
   'Haut droite',
   'Bas gauche',
   'Bas droite',
+  'Centre',
 ];
 
 int arrange(Json p) {
@@ -1321,7 +1392,8 @@ int arrange(Json p) {
   final failed = _arrangeFromTopLeft(working);
   if (failed != 0) return failed;
   final proposed = {for (final item in tables(working)) item['id']: item};
-  for (final item in tables(p)) {
+  final result = clone(p);
+  for (final item in tables(result)) {
     if (item['fixed'] == true || item['capacity'] == 0) continue;
     final point = proposed[item['id']]!;
     item['x'] = right
@@ -1330,6 +1402,22 @@ int arrange(Json p) {
     item['y'] = bottom
         ? height - number(point['y']) - number(item['h'])
         : point['y'];
+  }
+  final geometry = PlanGeometry(result, rows(result, 'items'));
+  final invalid = tables(result)
+      .where(
+        (item) =>
+            item['fixed'] != true &&
+            item['capacity'] != 0 &&
+            !fits(result, item, rows(result, 'items'), geometry: geometry),
+      )
+      .length;
+  if (invalid != 0) return invalid;
+  final originals = {for (final item in tables(p)) item['id']: item};
+  for (final item in tables(result)) {
+    if (item['fixed'] == true || item['capacity'] == 0) continue;
+    originals[item['id']]!['x'] = item['x'];
+    originals[item['id']]!['y'] = item['y'];
   }
   return 0;
 }
@@ -1360,6 +1448,7 @@ int _arrangeFromTopLeft(Json p) {
       t,
       placed,
       fromCorner: proposals.isEmpty && p['arrangementCorner'] != null,
+      fromCenter: p['arrangementCorner'] == 'Centre',
     );
     if (candidate == null) {
       failed++;

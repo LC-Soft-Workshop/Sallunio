@@ -3152,7 +3152,7 @@ class _HomeState extends State<Home> {
             child: DropdownButtonFormField<String>(
               isExpanded: true,
               initialValue: corner,
-              decoration: const InputDecoration(labelText: 'Coin de départ'),
+              decoration: const InputDecoration(labelText: 'Point de départ'),
               items: arrangementCorners
                   .map(
                     (value) =>
