@@ -3,6 +3,12 @@
 Historique en français, établi à partir des validations conservées du projet.
 Les anciennes versions ne constituent pas des livraisons GitHub rétroactives.
 
+## 1.0.37
+
+- Le repère indicatif de confort de 60 cm par place reste une information de préparation, avant comme après attribution des groupes. Il ne devient plus une alerte lorsque la capacité définie est respectée.
+- Les vrais dépassements de capacité utilisable, chevauchements, passages insuffisants et autres conflits restent contrôlés et signalés.
+- Vérification de l'attribution automatique sur une table à six places d'un seul côté : conservation du plan et des informations de confort, sans création d'erreur de proximité ou de confort.
+
 ## 1.0.36
 
 - Clarification du menu d'import : la restauration complète reprend tous les événements sélectionnés et tout leur contenu, dont le plan, la disposition, les zones, obstacles, entrées, sorties, attributions et réglages.

@@ -649,13 +649,11 @@ List<String> preparationNotes(Json p) => _preparationChecks(p).$2;
             : '${t['label']} : assises hors salle. Décaler la table.',
       );
     }
-    if (occupancy(p, t['id']) > comfortableCapacity(t)) {
-      result.add(
-        '${t['label']} : confort insuffisant (repère 60 cm/place : ${comfortableCapacity(t)}). Réduire la capacité ou ajouter une table.',
-      );
-    } else if (t['capacity'] > comfortableCapacity(t)) {
+    // Comfort is an indicative model recommendation, independent of occupancy.
+    // Capacity and geometry violations remain actionable checks below.
+    if (t['capacity'] > comfortableCapacity(t)) {
       notes.add(
-        '${t['label']} : capacité déclarée ${t['capacity']}, repère de confort ${comfortableCapacity(t)} places (60 cm/place).',
+        '${t['label']} : capacité définie ${t['capacity']}, repère de confort ${comfortableCapacity(t)} places (60 cm/place, indicatif).',
       );
     }
     final capacity = geo.capacity(t);

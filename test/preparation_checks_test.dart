@@ -29,7 +29,7 @@ void main() {
     g['alloc'] = <Json>[];
     expect(issues(p), contains('Camy : 0/2 places attribuées.'));
   });
-  test('Comfort uses current occupancy and tolerates metric rounding', () {
+  test('Comfort remains information independently of occupancy and tolerates rounding', () {
     final p = fixture(), t = tables(p).first, g = rows(p, 'groups').single;
     t['w'] = 1.7999999999999998;
     expect(comfortableCapacity(t), 6);
@@ -43,7 +43,11 @@ void main() {
     g['alloc'] = [
       {'table': t['id'], 'count': 6},
     ];
-    expect(issues(p).any((s) => s.contains('confort insuffisant')), true);
+    expect(issues(p).where((s) => s.contains('confort')), isEmpty);
+    expect(
+      preparationNotes(p).any((s) => s.contains('repère de confort 4')),
+      true,
+    );
     t['w'] = 1.8;
     expect(issues(p).where((s) => s.contains('confort insuffisant')), isEmpty);
   });
