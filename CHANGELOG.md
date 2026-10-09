@@ -3,6 +3,14 @@
 Historique en français, établi à partir des validations conservées du projet.
 Les anciennes versions ne constituent pas des livraisons GitHub rétroactives.
 
+## 1.0.34
+
+- Sans appui autorisé, maintien d'au moins la moitié du passage entre le bord des tables et les murs : passage de 1,20 m, dégagement au mur d'au moins 60 cm. L'espace nécessaire aux assises reste également respecté.
+- Application de cette règle aux cinq points de départ et après retrait d'un appui au mur ; l'exception ne concerne que les murs explicitement autorisés.
+- En cas de manque de place, disposition des tables qui tiennent et regroupement des autres hors salle, en rouge, sans suppression ni perte des attributions.
+- Cadrage étendu pour rendre les tables non placées visibles et sélectionnables ; explication du manque de place sur le plan et dans les contrôles.
+- Les tables non placées sont réessayées lors d'une nouvelle disposition. Les tables verrouillées et de service restent à leur position. L'opération reste annulable.
+
 ## 1.0.33
 
 - Ajout du point de départ « Centre » pour remplir la salle à partir du centre vers les espaces disponibles, en respectant les accolements et les zones.

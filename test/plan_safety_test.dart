@@ -41,14 +41,17 @@ void main() {
       }
     }
   });
-  test('Failed arrangement leaves every original position intact', () {
+  test('Insufficient room puts excess tables outside without overlaps', () {
     final p = plan([table('a', 2, 2), table('b', 2, 4)], 'Aucun');
     p['room']['width'] = 4.0;
     p['room']['height'] = 4.0;
     p['aisle'] = 1.5;
-    final before = clone(p);
     expect(arrange(p), greaterThan(0));
-    expect(p, before);
+    expect(tables(p).where((t) => unplacedTable(p, t)), isNotEmpty);
+    for (final t in tables(p).where((t) => !unplacedTable(p, t))) {
+      expect(fits(p, t, rows(p, 'items')), true);
+    }
+    expect(overlaps(tables(p)[0], tables(p)[1]), false);
   });
 
   test('Successful arrangement with 1.50 m aisles has no conflicts', () {

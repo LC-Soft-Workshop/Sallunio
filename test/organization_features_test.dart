@@ -121,7 +121,7 @@ void main() {
     );
   }
   test(
-    'Corner arrangement respects concave room and failure remains atomic',
+    'Corner arrangement respects concave room and parks excess tables outside',
     () {
       final p = demoProject();
       p['items'] = tables(p).take(2).map(clone).toList();
@@ -132,9 +132,9 @@ void main() {
       p['room']['polygon'] = '';
       p['room']['width'] = 2.0;
       p['room']['height'] = 1.0;
-      final before = clone(p);
       expect(arrange(p), greaterThan(0));
-      expect(p['items'], before['items']);
+      expect(tables(p).every((t) => unplacedTable(p, t)), true);
+      expect(tables(p).every((t) => number(t['x']) >= 2), true);
     },
   );
   test('Private preferences stay outside general controls and plan SVG', () {

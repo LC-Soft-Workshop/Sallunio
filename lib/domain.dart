@@ -556,6 +556,7 @@ bool fits(
       PlanGeometry(p, [...others.where((i) => i['id'] != a['id']), a]);
   final e = geo.bounds(a), room = p['room'] as Json;
   if (!polygonFits(e, room)) return false;
+  if (!wallClearanceFits(p, a)) return false;
   const epsilon = .0000001;
   if (number(e['x']) < -epsilon ||
       number(e['y']) < -epsilon ||
@@ -579,6 +580,37 @@ bool fits(
                 )),
       );
 }
+
+bool wallClearanceFits(Json p, Json table) {
+  if (table['kind'] != 'table' || table['capacity'] == 0) return true;
+  final gap = number(p['aisle']) / 2;
+  final allowed = table['shape'] == 'cercle' ? <String>{} : wallSides(p);
+  final left = allowed.contains('left') ? 0.0 : gap;
+  final right = allowed.contains('right') ? 0.0 : gap;
+  final top = allowed.contains('top') ? 0.0 : gap;
+  final bottom = allowed.contains('bottom') ? 0.0 : gap;
+  final bounds = {
+    ...table,
+    'x': number(table['x']) - left,
+    'y': number(table['y']) - top,
+    'w': number(table['w']) + left + right,
+    'h': number(table['h']) + top + bottom,
+  };
+  final room = p['room'];
+  const epsilon = .0000001;
+  return number(bounds['x']) >= -epsilon &&
+      number(bounds['y']) >= -epsilon &&
+      number(bounds['x']) + number(bounds['w']) <=
+          number(room['width']) + epsilon &&
+      number(bounds['y']) + number(bounds['h']) <=
+          number(room['height']) + epsilon &&
+      polygonFits(bounds, room);
+}
+
+bool unplacedTable(Json p, Json table) =>
+    table['unplacedByArrangement'] == true &&
+    (number(table['x']) >= number(p['room']['width']) ||
+        number(table['y']) >= number(p['room']['height']));
 
 int comfortableCapacity(Json t) {
   if (t['capacity'] == 0) return 0;
@@ -604,8 +636,18 @@ List<String> preparationNotes(Json p) => _preparationChecks(p).$2;
   final items = rows(p, 'items');
   final geo = PlanGeometry(p, items);
   for (final t in tables(p)) {
+    if (unplacedTable(p, t)) {
+      result.add(
+        '${t['label']} : hors salle, pas assez de place pour disposer toutes les tables. Réduire le nombre de tables ou revoir les dimensions et les passages.',
+      );
+      continue;
+    }
     if (!fits(p, t, [], passages: false, geometry: geo)) {
-      result.add('${t['label']} : assises hors salle. Décaler la table.');
+      result.add(
+        !wallClearanceFits(p, t)
+            ? '${t['label']} : dégagement au mur insuffisant (au moins ${(number(p['aisle']) / 2).toStringAsFixed(2)} m sans appui autorisé). Décaler la table.'
+            : '${t['label']} : assises hors salle. Décaler la table.',
+      );
     }
     if (occupancy(p, t['id']) > comfortableCapacity(t)) {
       result.add(
@@ -1343,12 +1385,15 @@ int arrange(Json p) {
   final corner = p['arrangementCorner'] ?? arrangementCorners.first;
   final right = corner == 'Haut droite' || corner == 'Bas droite';
   final bottom = corner == 'Bas gauche' || corner == 'Bas droite';
-  if (!right && !bottom) return _arrangeFromTopLeft(p);
   final working = clone(p);
   final width = number(p['room']['width']),
       height = number(p['room']['height']);
   for (final item in rows(working, 'items')) {
-    if (item['sides'] == 'Un côté') item['seatSide'] ??= 'Bas';
+    if (item['sides'] == 'Un côté') {
+      item['seatSide'] ??= number(item['w']) >= number(item['h'])
+          ? 'Bas'
+          : 'Droite';
+    }
     if (right) {
       item['x'] = width - number(item['x']) - number(item['w']);
       item['seatSide'] = switch (item['seatSide']) {
@@ -1389,13 +1434,17 @@ int arrange(Json p) {
         )
         .join(';');
   }
-  final failed = _arrangeFromTopLeft(working);
-  if (failed != 0) return failed;
+  _arrangeFromTopLeft(working);
   final proposed = {for (final item in tables(working)) item['id']: item};
   final result = clone(p);
   for (final item in tables(result)) {
     if (item['fixed'] == true || item['capacity'] == 0) continue;
     final point = proposed[item['id']]!;
+    if (point['unplacedByArrangement'] == true) {
+      item['unplacedByArrangement'] = true;
+      continue;
+    }
+    item.remove('unplacedByArrangement');
     item['x'] = right
         ? width - number(point['x']) - number(item['w'])
         : point['x'];
@@ -1403,23 +1452,69 @@ int arrange(Json p) {
         ? height - number(point['y']) - number(item['h'])
         : point['y'];
   }
+  _parkUnplacedTables(result);
   final geometry = PlanGeometry(result, rows(result, 'items'));
   final invalid = tables(result)
       .where(
         (item) =>
             item['fixed'] != true &&
             item['capacity'] != 0 &&
+            !unplacedTable(result, item) &&
             !fits(result, item, rows(result, 'items'), geometry: geometry),
       )
-      .length;
-  if (invalid != 0) return invalid;
+      .toList();
+  for (final item in invalid) {
+    item['unplacedByArrangement'] = true;
+  }
+  if (invalid.isNotEmpty) _parkUnplacedTables(result);
   final originals = {for (final item in tables(p)) item['id']: item};
   for (final item in tables(result)) {
     if (item['fixed'] == true || item['capacity'] == 0) continue;
     originals[item['id']]!['x'] = item['x'];
     originals[item['id']]!['y'] = item['y'];
+    if (item['unplacedByArrangement'] == true) {
+      originals[item['id']]!['unplacedByArrangement'] = true;
+    } else {
+      originals[item['id']]!.remove('unplacedByArrangement');
+    }
   }
-  return 0;
+  return tables(result).where((t) => unplacedTable(result, t)).length;
+}
+
+void _parkUnplacedTables(Json p) {
+  final pending = tables(p)
+      .where(
+        (t) =>
+            t['unplacedByArrangement'] == true &&
+            t['fixed'] != true &&
+            t['capacity'] != 0,
+      )
+      .toList();
+  final width = number(p['room']['width']),
+      height = number(p['room']['height']);
+  var x = width + max(.6, number(p['aisle'])), y = .6, columnWidth = 0.0;
+  for (final table in pending) {
+    final w = number(table['w']), h = number(table['h']);
+    if (y > .6 && y + h > height) {
+      x += columnWidth + .6;
+      y = .6;
+      columnWidth = 0;
+    }
+    var candidate = {...table, 'x': x, 'y': y};
+    while (rows(p, 'items').any(
+      (i) =>
+          i['id'] != table['id'] &&
+          !pending.contains(i) &&
+          overlaps(candidate, i, .3),
+    )) {
+      x += w + .6;
+      candidate = {...table, 'x': x, 'y': y};
+    }
+    table['x'] = x;
+    table['y'] = y;
+    columnWidth = max(columnWidth, w);
+    y += h + max(.6, number(p['aisle']));
+  }
 }
 
 int _arrangeFromTopLeft(Json p) {
@@ -1457,15 +1552,17 @@ int _arrangeFromTopLeft(Json p) {
       placed.add(candidate);
     }
   }
-  if (failed > 0) return failed;
   for (final t in originals) {
     final candidate = proposals[t['id']];
     if (candidate != null) {
       t['x'] = candidate['x'];
       t['y'] = candidate['y'];
+      t.remove('unplacedByArrangement');
+    } else if (t['fixed'] != true && t['capacity'] != 0) {
+      t['unplacedByArrangement'] = true;
     }
   }
-  return 0;
+  return failed;
 }
 
 /// Manual collective rotation keeps each table centre and its assignments.

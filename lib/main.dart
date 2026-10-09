@@ -3182,7 +3182,7 @@ class _HomeState extends State<Home> {
       toast(
         failed == 0
             ? 'Disposition proposée. Examiner les contrôles.'
-            : '$failed tables sans emplacement : aucune table déplacée. Réduire les couloirs ou le nombre de tables.',
+            : 'Pas assez de place : $failed tables placées hors salle, en rouge. Réduire le nombre de tables ou revoir la salle et les passages.',
       );
     });
   }
@@ -3210,6 +3210,23 @@ class _HomeState extends State<Home> {
     final room = p!['room'],
         ts = rows(p!, 'items').where((i) => i['id'] == selected).toList();
     final t = ts.isEmpty ? null : ts.first;
+    final pending = tables(p!)
+        .where((item) => unplacedTable(p!, item))
+        .toList();
+    final drawingWidth = rows(p!, 'items').fold<double>(
+      number(room['width']),
+      (value, item) => max(
+        value,
+        number(item['x']) + number(item['w']) + (pending.isEmpty ? 0 : .3),
+      ),
+    );
+    final drawingHeight = rows(p!, 'items').fold<double>(
+      number(room['height']),
+      (value, item) => max(
+        value,
+        number(item['y']) + number(item['h']) + (pending.isEmpty ? 0 : .3),
+      ),
+    );
     return Column(
       children: [
         heading(
@@ -3264,8 +3281,8 @@ class _HomeState extends State<Home> {
                       final scale = max(
                         .1,
                         min(
-                          (constraints.maxWidth - 60) / number(room['width']),
-                          (constraints.maxHeight - 60) / number(room['height']),
+                          (constraints.maxWidth - 60) / drawingWidth,
+                          (constraints.maxHeight - 60) / drawingHeight,
                         ),
                       );
                       return InteractiveViewer(
@@ -3282,12 +3299,16 @@ class _HomeState extends State<Home> {
                               onPointerMove: (event) => cursorPosition.value =
                                   event.localPosition / scale,
                               child: SizedBox(
-                                width: number(room['width']) * scale,
-                                height: number(room['height']) * scale,
+                                width: drawingWidth * scale,
+                                height: drawingHeight * scale,
                                 child: Stack(
                                   clipBehavior: Clip.none,
                                   children: [
-                                    Positioned.fill(
+                                    Positioned(
+                                      left: 0,
+                                      top: 0,
+                                      width: number(room['width']) * scale,
+                                      height: number(room['height']) * scale,
                                       child: CustomPaint(
                                         painter: GridPainter(
                                           scale,
@@ -3295,6 +3316,21 @@ class _HomeState extends State<Home> {
                                         ),
                                       ),
                                     ),
+                                    if (pending.isNotEmpty)
+                                      Positioned(
+                                        left:
+                                            (number(room['width']) +
+                                                max(.6, number(p!['aisle']))) *
+                                            scale,
+                                        top: 0,
+                                        child: const Text(
+                                          'Hors salle : manque de place',
+                                          style: TextStyle(
+                                            color: Colors.red,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                      ),
                                     ...rows(p!, 'items').map(
                                       (i) => Positioned(
                                         left: number(i['x']) * scale,
@@ -3312,6 +3348,7 @@ class _HomeState extends State<Home> {
                                             if (i['fixed'] != true) {
                                               selected = i['id'];
                                               checkpoint();
+                                              i.remove('unplacedByArrangement');
                                               dragX = number(i['x']);
                                               dragY = number(i['y']);
                                             }
@@ -3560,7 +3597,7 @@ class _HomeState extends State<Home> {
                                                         '${i['label']}${i['kind'] == 'table'
                                                             ? i['capacity'] == 0
                                                                   ? '\nService'
-                                                                  : '\n${counts[i['id']] ?? 0}/${geometry.capacity(i)}'
+                                                                  : '\n${counts[i['id']] ?? 0}/${geometry.capacity(i)}${unplacedTable(p!, i) ? '\nNon placée' : ''}'
                                                             : ''}',
                                                         textAlign:
                                                             TextAlign.center,
@@ -4509,19 +4546,23 @@ class ItemPainter extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     if (item['kind'] == 'zone' && item['zoneFill'] == 'Invisible') return;
-    final color = switch (item['kind']) {
-      'table' =>
-        occupied == 0
-            ? const Color(0xffd7ddda)
-            : occupied < capacity
-            ? const Color(0xffffd9ad)
-            : const Color(0xffa9d8bf),
-      'zone' => Color(zoneColors[item['zoneColor']] ?? zoneColors['Bleu']!),
-      'entry' => const Color(0xffd3c3ed),
-      'exit' => const Color(0xfff6dc96),
-      'door' => const Color(0xfff6c4aa),
-      _ => const Color(0xffc6ceca),
-    };
+    final color = item['unplacedByArrangement'] == true && conflict
+        ? const Color(0xffffcccc)
+        : switch (item['kind']) {
+            'table' =>
+              occupied == 0
+                  ? const Color(0xffd7ddda)
+                  : occupied < capacity
+                  ? const Color(0xffffd9ad)
+                  : const Color(0xffa9d8bf),
+            'zone' => Color(
+              zoneColors[item['zoneColor']] ?? zoneColors['Bleu']!,
+            ),
+            'entry' => const Color(0xffd3c3ed),
+            'exit' => const Color(0xfff6dc96),
+            'door' => const Color(0xfff6c4aa),
+            _ => const Color(0xffc6ceca),
+          };
     final style = item['kind'] == 'zone'
         ? item['zoneFill'] ?? 'Plein'
         : 'Plein';

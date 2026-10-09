@@ -91,31 +91,28 @@ void main() {
     },
   );
 
-  test(
-    'Centre avoids invisible central zone and failed placement stays atomic',
-    () {
-      final p = room();
-      final zone = {
-        'id': 'zone',
-        'kind': 'zone',
-        'label': '',
-        'shape': 'rectangle',
-        'x': 5.0,
-        'y': 0.0,
-        'w': 2.0,
-        'h': 9.0,
-        'fixed': true,
-        'fill': 'Invisible',
-      };
-      p['items'] = [table('first'), table('second'), zone];
-      expect(arrange(p), 0);
-      expect(tables(p).every((t) => fits(p, t, rows(p, 'items'))), true);
-      expect(tables(p).every((t) => !overlaps(t, zone)), true);
-      p['room']['width'] = 1.0;
-      p['room']['height'] = 1.0;
-      final before = clone(p)['items'];
-      expect(arrange(p), greaterThan(0));
-      expect(p['items'], before);
-    },
-  );
+  test('Centre avoids invisible central zone and places excess outside', () {
+    final p = room();
+    final zone = {
+      'id': 'zone',
+      'kind': 'zone',
+      'label': '',
+      'shape': 'rectangle',
+      'x': 5.0,
+      'y': 0.0,
+      'w': 2.0,
+      'h': 9.0,
+      'fixed': true,
+      'fill': 'Invisible',
+    };
+    p['items'] = [table('first'), table('second'), zone];
+    expect(arrange(p), 0);
+    expect(tables(p).every((t) => fits(p, t, rows(p, 'items'))), true);
+    expect(tables(p).every((t) => !overlaps(t, zone)), true);
+    p['room']['width'] = 1.0;
+    p['room']['height'] = 1.0;
+    expect(arrange(p), greaterThan(0));
+    expect(tables(p).every((t) => unplacedTable(p, t)), true);
+    expect(rows(p, 'items').last, zone);
+  });
 }
