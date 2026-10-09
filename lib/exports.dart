@@ -106,44 +106,54 @@ Future<void> exportPdf(
               decoration: pw.BoxDecoration(border: pw.Border.all()),
               child: pw.Stack(
                 children: [
-                  pw.Positioned(
-                    left: 0,
-                    top: 0,
-                    child: pw.SvgImage(
-                      svg: planSvg(p),
-                      width: number(p['room']['width']) * scale,
-                      height: number(p['room']['height']) * scale,
+                  for (final foreground in [false, true]) ...[
+                    pw.Positioned(
+                      left: 0,
+                      top: 0,
+                      child: pw.SvgImage(
+                        svg: planSvg(
+                          p,
+                          tablesOnly: foreground,
+                          withGrid: !foreground,
+                        ),
+                        width: number(p['room']['width']) * scale,
+                        height: number(p['room']['height']) * scale,
+                      ),
                     ),
-                  ),
-                  ...rows(p, 'items')
-                      .where(visibleInPlanPdf)
-                      .map(
-                        (t) => pw.Positioned(
-                          left: number(t['x']) * scale,
-                          top: number(t['y']) * scale,
-                          child: pw.Container(
-                            width: number(t['w']) * scale,
-                            height: number(t['h']) * scale,
-                            padding: const pw.EdgeInsets.all(2),
-                            alignment: pw.Alignment.center,
-                            child: pw.FittedBox(
-                              fit: pw.BoxFit.scaleDown,
-                              child: pw.Text(
-                                '${t['label']}${t['kind'] == 'table'
-                                    ? t['capacity'] == 0
-                                          ? '\nService'
-                                          : '\n${occupancy(p, t['id'])}/${geometry.capacity(t)}'
-                                    : ''}',
-                                textAlign: pw.TextAlign.center,
-                                style: pw.TextStyle(
-                                  fontSize: 8,
-                                  color: PdfColor.fromInt(0xff123c38),
+                    ...planPaintOrder(p)
+                        .where(
+                          (item) =>
+                              visibleInPlanPdf(item) &&
+                              (item['kind'] == 'table') == foreground,
+                        )
+                        .map(
+                          (t) => pw.Positioned(
+                            left: number(t['x']) * scale,
+                            top: number(t['y']) * scale,
+                            child: pw.Container(
+                              width: number(t['w']) * scale,
+                              height: number(t['h']) * scale,
+                              padding: const pw.EdgeInsets.all(2),
+                              alignment: pw.Alignment.center,
+                              child: pw.FittedBox(
+                                fit: pw.BoxFit.scaleDown,
+                                child: pw.Text(
+                                  '${t['label']}${t['kind'] == 'table'
+                                      ? t['capacity'] == 0
+                                            ? '\nService'
+                                            : '\n${occupancy(p, t['id'])}/${geometry.capacity(t)}'
+                                      : ''}',
+                                  textAlign: pw.TextAlign.center,
+                                  style: pw.TextStyle(
+                                    fontSize: 8,
+                                    color: PdfColor.fromInt(0xff123c38),
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
+                  ],
                   if (includePlaceLabels)
                     ...ts.expand((table) {
                       final labels = tablePlaceLabels(p, table, geometry);

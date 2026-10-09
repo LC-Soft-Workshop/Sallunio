@@ -1726,6 +1726,16 @@ bool propagateFurniture(Json p, Json oldType, Json newType) {
   return resized;
 }
 
+bool canResizePlanObject(Json item) =>
+    ['zone', 'entry', 'exit', 'door'].contains(item['kind']) &&
+    item['fixed'] != true;
+
+/// Stable visual layering, without changing saved objects or collision checks.
+List<Json> planPaintOrder(Json p) => [
+  ...rows(p, 'items').where((item) => item['kind'] != 'table'),
+  ...rows(p, 'items').where((item) => item['kind'] == 'table'),
+];
+
 void resizeZone(
   Json p,
   Json item,
@@ -1734,7 +1744,7 @@ void resizeZone(
   double dy,
   String corner,
 ) {
-  if (item['kind'] != 'zone' || item['fixed'] == true) return;
+  if (!canResizePlanObject(item)) return;
   final left = corner.contains('left'), top = corner.contains('top');
   final right = number(origin['x']) + number(origin['w']);
   final bottom = number(origin['y']) + number(origin['h']);

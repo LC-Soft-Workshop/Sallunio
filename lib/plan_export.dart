@@ -8,35 +8,38 @@ bool visibleInPlanPdf(Json item) =>
 String _hex(int color) =>
     '#${(color & 0xffffff).toRadixString(16).padLeft(6, '0')}';
 
-String planSvg(Json p) {
+String planSvg(Json p, {bool? tablesOnly, bool withGrid = true}) {
   const unit = 100.0;
   final width = number(p['room']['width']) * unit,
       height = number(p['room']['height']) * unit;
   final geometry = PlanGeometry(p, rows(p, 'items'));
   final markers = planMarkerColors(p);
   final svg = StringBuffer(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height"><rect width="$width" height="$height" fill="white"/>',
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height">${withGrid ? '<rect width="$width" height="$height" fill="white"/>' : ''}',
   );
-  for (var x = unit; x < width; x += unit) {
-    svg.write('<line x1="$x" y1="0" x2="$x" y2="$height" stroke="#e5ebe7"/>');
-  }
-  for (var y = unit; y < height; y += unit) {
-    svg.write('<line x1="0" y1="$y" x2="$width" y2="$y" stroke="#e5ebe7"/>');
-  }
-  final polygon = roomPolygon(p['room']);
-  if (polygon.isNotEmpty) {
-    final points = polygon
-        .map((point) => '${point.x * unit},${point.y * unit}')
-        .join(' ');
-    final outline = polygon
-        .map((point) => '${point.x * unit} ${point.y * unit}')
-        .join(' L ');
-    svg.write(
-      '<path d="M 0 0 H $width V $height H 0 Z M $outline Z" fill="#bdc8c1" fill-rule="evenodd"/><polygon points="$points" fill="none" stroke="#536a61" stroke-width="2"/>',
-    );
+  if (withGrid) {
+    for (var x = unit; x < width; x += unit) {
+      svg.write('<line x1="$x" y1="0" x2="$x" y2="$height" stroke="#e5ebe7"/>');
+    }
+    for (var y = unit; y < height; y += unit) {
+      svg.write('<line x1="0" y1="$y" x2="$width" y2="$y" stroke="#e5ebe7"/>');
+    }
+    final polygon = roomPolygon(p['room']);
+    if (polygon.isNotEmpty) {
+      final points = polygon
+          .map((point) => '${point.x * unit},${point.y * unit}')
+          .join(' ');
+      final outline = polygon
+          .map((point) => '${point.x * unit} ${point.y * unit}')
+          .join(' L ');
+      svg.write(
+        '<path d="M 0 0 H $width V $height H 0 Z M $outline Z" fill="#bdc8c1" fill-rule="evenodd"/><polygon points="$points" fill="none" stroke="#536a61" stroke-width="2"/>',
+      );
+    }
   }
   var index = 0;
-  for (final item in rows(p, 'items').where(visibleInPlanPdf)) {
+  for (final item in planPaintOrder(p).where(visibleInPlanPdf)) {
+    if (tablesOnly != null && (item['kind'] == 'table') != tablesOnly) continue;
     final x = number(item['x']) * unit, y = number(item['y']) * unit;
     final w = number(item['w']) * unit, h = number(item['h']) * unit;
     final occupied = item['kind'] == 'table' ? occupancy(p, item['id']) : 0;
@@ -107,8 +110,11 @@ String planSvg(Json p) {
     svg.write('</g>');
     index++;
   }
-  svg.write(
-    '<rect width="$width" height="$height" fill="none" stroke="#536a61" stroke-width="2"/></svg>',
-  );
+  if (withGrid) {
+    svg.write(
+      '<rect width="$width" height="$height" fill="none" stroke="#536a61" stroke-width="2"/>',
+    );
+  }
+  svg.write('</svg>');
   return svg.toString();
 }

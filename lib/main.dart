@@ -272,7 +272,7 @@ class _HomeState extends State<Home> {
     });
   }
 
-  List<Widget> zoneHandles(Json item, double scale) {
+  List<Widget> objectResizeHandles(Json item, double scale) {
     return ['top-left', 'top-right', 'bottom-left', 'bottom-right'].map((
       corner,
     ) {
@@ -285,7 +285,12 @@ class _HomeState extends State<Home> {
               ? SystemMouseCursors.resizeUpLeftDownRight
               : SystemMouseCursors.resizeUpRightDownLeft,
           child: Tooltip(
-            message: 'Redimensionner la zone',
+            message: const {
+              'zone': 'Redimensionner la zone',
+              'entry': 'Redimensionner l’entrée',
+              'exit': 'Redimensionner la sortie',
+              'door': 'Redimensionner la porte',
+            }[item['kind']]!,
             child: GestureDetector(
               key: ValueKey('resize-${item['id']}-$corner'),
               behavior: HitTestBehavior.opaque,
@@ -4058,7 +4063,7 @@ class _HomeState extends State<Home> {
                                           ),
                                         ),
                                       ),
-                                    ...rows(p!, 'items').map(
+                                    ...planPaintOrder(p!).map(
                                       (i) => Positioned(
                                         left: number(i['x']) * scale,
                                         top: number(i['y']) * scale,
@@ -4426,10 +4431,9 @@ class _HomeState extends State<Home> {
                                       ),
                                     ),
                                     if (t != null &&
-                                        t['kind'] == 'zone' &&
-                                        t['fixed'] != true &&
+                                        canResizePlanObject(t) &&
                                         !measuring)
-                                      ...zoneHandles(t, scale),
+                                      ...objectResizeHandles(t, scale),
                                     if (measuring)
                                       Positioned.fill(
                                         child: GestureDetector(

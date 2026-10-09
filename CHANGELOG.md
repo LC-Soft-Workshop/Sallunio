@@ -3,6 +3,13 @@
 Historique en français, établi à partir des validations conservées du projet.
 Les anciennes versions ne constituent pas des livraisons GitHub rétroactives.
 
+## 1.0.41
+
+- Entrées, sorties et portes redimensionnables par les quatre poignées, comme les zones. Les objets verrouillés restent protégés ; le redimensionnement est annulable. Les tables ne sont pas redimensionnables manuellement.
+- Tables toujours affichées au premier plan, au-dessus des zones, obstacles, entrées, sorties et portes, quel que soit l'ordre de création des objets. Une table recouverte reste visible et sélectionnable.
+- Même ordre d'affichage dans les PDF, y compris pour les libellés. Les zones invisibles restent absentes des PDF.
+- Aucun changement des règles de placement : les chevauchements restent signalés, et les positions enregistrées ne sont pas modifiées par l'ordre d'affichage.
+
 ## 1.0.40
 
 - Conservation de toutes les améliorations du plan, des places adaptées et des exports CSV ajoutées en 1.0.39.
