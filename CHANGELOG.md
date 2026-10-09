@@ -3,6 +3,11 @@
 Historique en français, établi à partir des validations conservées du projet.
 Les anciennes versions ne constituent pas des livraisons GitHub rétroactives.
 
+## 1.0.40
+
+- Conservation de toutes les améliorations du plan, des places adaptées et des exports CSV ajoutées en 1.0.39.
+- Correction de l'édition des personnes après retrait d'une table, modification des attributions ou réduction de capacité : les anciennes références devenues inutilisables sont retirées du formulaire, sans effacer les noms, repas, besoins ni effectifs. Annuler le formulaire conserve l'événement.
+
 ## 1.0.39
 
 - Places adaptées configurables sur chaque table : emplacement numéroté, largeur et profondeur, réduction explicite de la capacité et signalement des besoins non couverts. Repère d'organisation à vérifier sur place.

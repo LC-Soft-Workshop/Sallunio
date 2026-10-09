@@ -2161,6 +2161,7 @@ class _HomeState extends State<Home> {
               'companion': '',
             },
     );
+    pruneIndividualPlaces(p!, draft);
     var revision = 0;
     String? placementError;
     final ok = await showDialog<bool>(

@@ -6,6 +6,36 @@ import 'package:tableo/plan_tools.dart';
 import 'package:tableo/backup_merge.dart';
 
 void main() {
+  test('Removed or reassigned table never blocks editing a named person', () {
+    final p = demoProject(), g = rows(p, 'groups')[0], t = tables(p)[0];
+    g['seats'] = [
+      {
+        'number': 1,
+        'name': 'Personne fictive',
+        'meal': 'Normal',
+        'need': 'Fauteuil',
+        'allergy': 'fictive',
+        'companion': '',
+        'table': t['id'],
+        'slot': 5,
+      },
+    ];
+    g['alloc'] = [
+      {'table': t['id'], 'count': 1},
+    ];
+    t['capacity'] = 4;
+    final draft = clone(g);
+    pruneIndividualPlaces(p, draft);
+    expect(draft['seats'][0]['table'], t['id']);
+    expect(draft['seats'][0].containsKey('slot'), false);
+    g['alloc'] = [];
+    final unassigned = clone(g), before = clone(g);
+    pruneIndividualPlaces(p, unassigned);
+    expect(unassigned['seats'][0].containsKey('table'), false);
+    expect(unassigned['seats'][0]['name'], 'Personne fictive');
+    expect(unassigned['seats'][0]['need'], 'Fauteuil');
+    expect(g, before);
+  });
   test(
     'Partial import remaps individual places and retains adapted furniture',
     () {

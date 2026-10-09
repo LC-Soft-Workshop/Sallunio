@@ -2200,6 +2200,25 @@ Json individualSeat(Json group, int index) {
   };
 }
 
+/// Remove stale position references in an editing draft, preserving identities.
+void pruneIndividualPlaces(Json p, Json group) {
+  final allowed = assignedTables(p, group);
+  for (final seat in (group['seats'] as List? ?? []).cast<Json>()) {
+    if (seat['table'] == null) continue;
+    final matching = allowed
+        .where((table) => table['id'] == seat['table'])
+        .toList();
+    if (matching.isEmpty) {
+      seat.remove('table');
+      seat.remove('slot');
+    } else if (seat['slot'] != null &&
+        (seat['slot'] < 0 ||
+            seat['slot'] >= effectiveCapacity(p, matching.first))) {
+      seat.remove('slot');
+    }
+  }
+}
+
 Map<String, List<int>> groupTablePeople(Json group) {
   final budget = <String, int>{};
   for (final allocation in (group['alloc'] as List).cast<Json>()) {
