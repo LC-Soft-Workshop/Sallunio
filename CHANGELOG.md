@@ -3,6 +3,16 @@
 Historique en français, établi à partir des validations conservées du projet.
 Les anciennes versions ne constituent pas des livraisons GitHub rétroactives.
 
+## 1.0.42
+
+- Magnétisme étendu aux tables seules, sélections et ensembles accolés, ainsi qu'aux zones, obstacles, entrées, sorties et portes. Un ensemble s'accroche par une translation rigide, sans modifier les dimensions ou les positions relatives de ses tables.
+- Accroche entre groupes de tables sur les côtés autorisés, avec alignement des centres. Les tables rondes restent séparées ; les tables non accolées peuvent s'aligner à la distance du passage configuré.
+- Accroche aux murs, y compris aux parois d'un plan polygonal, en respectant l'appui autorisé, les assises et le passage minimum sans appui. Aucun chevauchement créé par une proposition d'accroche.
+- Repères bleus temporaires pendant l'accroche. Décrochage possible en continuant à glisser, même par petits mouvements ; touche Alt ou bouton de magnétisme pour le déplacement libre.
+- Barre d'outils à icônes carrées dans le bord gauche du plan : noms par place, sélection, filtres, déplacement des ensembles, rotation, mesure, places adaptées, verrouillage, édition, ajout de tables et d'objets, accolement, appui au mur et recentrage.
+- Outils disposés de façon compacte sur les petites fenêtres, avec info-bulles. Rotation regroupée sous une seule icône, au choix pour la sélection ou toutes les tables.
+- Déplacements et modifications toujours annulables ; objets verrouillés protégés. Les repères temporaires restent absents des exports et des sauvegardes.
+
 ## 1.0.41
 
 - Entrées, sorties et portes redimensionnables par les quatre poignées, comme les zones. Les objets verrouillés restent protégés ; le redimensionnement est annulable. Les tables ne sont pas redimensionnables manuellement.

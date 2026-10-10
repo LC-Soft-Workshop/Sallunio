@@ -22,6 +22,7 @@ Ce lien télécharge toujours la dernière version publiée.
 - Sauvegarde et restauration d'événements, import de mobilier ou réservations dans l'événement courant.
 - Annuler/rétablir, notes d'organisation et contrôles de préparation.
 - Sélection multiple, déplacement des ensembles accolés, mesure en mètres et filtres visuels du plan.
+- Barre d'outils du plan et magnétisme vers les tables, murs et objets, dans le respect des passages et accolements autorisés.
 - Places adaptées configurables, noms individuels facultatifs et exports CSV des réservations, attributions et repas.
 
 Les préférences privées de proximité entre groupes restent dans les réservations

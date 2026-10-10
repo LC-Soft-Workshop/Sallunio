@@ -62,11 +62,9 @@ void main() {
     await tester.tap(find.byKey(ValueKey('plan-item-${table['id']}')));
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(
-      find.text('Places adaptées', skipOffstage: false),
-    );
+    await tester.ensureVisible(find.byKey(const ValueKey('plan-tool-adapted')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Places adaptées'));
+    await tester.tap(find.byKey(const ValueKey('plan-tool-adapted')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ajouter un emplacement adapté'));
     await tester.pumpAndSettle();
@@ -215,13 +213,7 @@ void main() {
       final store = SnapshotStore(), before = clone(SnapshotStore().saved);
       await tester.pumpWidget(Tableo(store: store));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(
-        find.text('Sélection, filtres et mesure', skipOffstage: false),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Sélection, filtres et mesure'));
-      await tester.pumpAndSettle();
-      final button = find.text('Mesurer une distance');
+      final button = find.byKey(const ValueKey('plan-tool-measure'));
       await tester.ensureVisible(button);
       await tester.pumpAndSettle();
       await tester.tap(button);

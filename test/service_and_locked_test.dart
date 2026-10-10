@@ -96,7 +96,11 @@ void main() {
       final store = SnapshotStore();
       await tester.pumpWidget(Tableo(store: store));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('+ Objet / zone'));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('plan-tool-objects')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('plan-tool-objects')));
       await tester.pumpAndSettle();
       final function = find.byWidgetPredicate(
         (w) =>

@@ -50,10 +50,10 @@ void main() {
         await tester.tap(find.byTooltip('Annuler'));
         await tester.pumpAndSettle();
         expect(rows(store.saved, 'items').single, item);
-        final fixed = find.text('Position fixée', skipOffstage: false);
+        final fixed = find.byKey(const ValueKey('plan-tool-fixed'));
         await tester.ensureVisible(fixed);
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Position fixée'));
+        await tester.tap(find.byKey(const ValueKey('plan-tool-fixed')));
         await tester.pumpAndSettle();
         expect(
           find.byKey(ValueKey('resize-${item['id']}-bottom-right')),

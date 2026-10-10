@@ -61,6 +61,11 @@ void main() {
     );
     expect(find.text('Mobilité / PMR'), findsOneWidget);
     expect(find.byIcon(Icons.warning_amber), findsWidgets);
+    final rotation = find.byKey(const ValueKey('plan-tool-rotate'));
+    await tester.ensureVisible(rotation);
+    await tester.pumpAndSettle();
+    await tester.tap(rotation);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Toutes les tables : 90°'));
     await tester.pumpAndSettle();
     expect(tables(project).first['w'], .8);

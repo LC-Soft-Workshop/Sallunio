@@ -86,7 +86,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Afficher les groupes par place'));
+      await tester.tap(find.byKey(const ValueKey('plan-tool-labels')));
       await tester.pumpAndSettle();
       Iterable<PlaceLabelsPainter> painters() => tester
           .widgetList<CustomPaint>(find.byType(CustomPaint))
