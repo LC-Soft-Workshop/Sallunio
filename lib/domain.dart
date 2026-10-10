@@ -1775,6 +1775,32 @@ void resizeZone(
   item['h'] = h;
 }
 
+enum PlanMarkerShape { circle, hexagon, triangle }
+
+PlanMarkerShape planMarkerShape(String name) => switch (name) {
+  'Mobilité / PMR' || 'Emplacement adapté' => PlanMarkerShape.hexagon,
+  'Allergie' => PlanMarkerShape.triangle,
+  _ => PlanMarkerShape.circle,
+};
+
+List<Point<double>> planMarkerVertices(PlanMarkerShape shape) =>
+    switch (shape) {
+      PlanMarkerShape.hexagon => const [
+        Point(.25, 0.0),
+        Point(.75, 0.0),
+        Point(1.0, .5),
+        Point(.75, 1.0),
+        Point(.25, 1.0),
+        Point(0.0, .5),
+      ],
+      PlanMarkerShape.triangle => const [
+        Point(.5, 0.0),
+        Point(1.0, 1.0),
+        Point(0.0, 1.0),
+      ],
+      PlanMarkerShape.circle => const [],
+    };
+
 Map<String, int> planMarkerColors(Json p) {
   final names = <String>{
     'Mobilité / PMR',
@@ -1782,19 +1808,38 @@ Map<String, int> planMarkerColors(Json p) {
     ...mealTotals(p).keys.map((meal) => 'Repas : $meal'),
     ...tables(p).expand((table) => tableMarkers(p, table['id'])),
   }.toList();
-  const colors = [
-    0xff673ab7,
-    0xfff44336,
-    0xff2196f3,
-    0xff4caf50,
-    0xffff9800,
-    0xff009688,
-    0xff795548,
-    0xffe91e63,
-  ];
-  return {
-    for (var i = 0; i < names.length; i++) names[i]: colors[i % colors.length],
+  const fixed = {
+    'Mobilité / PMR': 0xff6a1b9a,
+    'Allergie': 0xffb71c1c,
+    'Emplacement adapté': 0xff00838f,
+    'Repas : Normal': 0xff1565c0,
+    'Repas : Végétarien': 0xff2e7d32,
+    'Repas : Sans gluten': 0xffef6c00,
+    'Repas : Ne mange pas': 0xff37474f,
   };
+  const custom = [
+    0xffc2185b,
+    0xff00acc1,
+    0xffb79500,
+    0xff6d4c41,
+    0xff455a64,
+    0xff7cb342,
+    0xff5c6bc0,
+    0xffd84315,
+  ];
+  var index = 0;
+  final used = fixed.values.toSet();
+  int nextCustomColor() {
+    while (true) {
+      final color = index < custom.length
+          ? custom[index]
+          : 0xff000000 | (((index * 0x9e3779) & 0x7f7f7f) + 0x303030);
+      index++;
+      if (used.add(color)) return color;
+    }
+  }
+
+  return {for (final name in names) name: fixed[name] ?? nextCustomColor()};
 }
 
 Set<String> tableMarkers(Json p, String id) {

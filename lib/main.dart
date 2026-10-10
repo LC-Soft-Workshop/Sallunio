@@ -17,6 +17,7 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'domain.dart';
 import 'plan_tools.dart';
 import 'magnetism.dart';
+import 'plan_marker.dart';
 
 import 'package:flutter/services.dart';
 
@@ -4701,21 +4702,11 @@ class _HomeState extends State<Home> {
                                                                     ) => Tooltip(
                                                                       message:
                                                                           name,
-                                                                      child: Container(
-                                                                        width:
-                                                                            9,
-                                                                        height:
-                                                                            9,
-                                                                        decoration: BoxDecoration(
-                                                                          color:
-                                                                              markerColors[name],
-                                                                          shape:
-                                                                              BoxShape.circle,
-                                                                          border: Border.all(
-                                                                            color:
-                                                                                Colors.white,
-                                                                          ),
-                                                                        ),
+                                                                      child: PlanMarker(
+                                                                        name:
+                                                                            name,
+                                                                        color:
+                                                                            markerColors[name]!,
                                                                       ),
                                                                     ),
                                                                   ),
@@ -4936,13 +4927,10 @@ class _HomeState extends State<Home> {
                           padding: const EdgeInsets.symmetric(vertical: 3),
                           child: Row(
                             children: [
-                              Container(
-                                width: 10,
-                                height: 10,
-                                decoration: BoxDecoration(
-                                  color: markerColors[name],
-                                  shape: BoxShape.circle,
-                                ),
+                              PlanMarker(
+                                name: name,
+                                color: markerColors[name]!,
+                                size: 16,
                               ),
                               const SizedBox(width: 8),
                               Expanded(child: Text(name)),

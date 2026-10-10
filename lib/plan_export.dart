@@ -8,6 +8,14 @@ bool visibleInPlanPdf(Json item) =>
 String _hex(int color) =>
     '#${(color & 0xffffff).toRadixString(16).padLeft(6, '0')}';
 
+String planMarkerSvg(String name, int color, double x, double y) {
+  final shape = planMarkerShape(name);
+  final geometry = shape == PlanMarkerShape.circle
+      ? 'circle cx="$x" cy="$y" r="5.5"'
+      : 'polygon points="${planMarkerVertices(shape).map((p) => '${x - 5.5 + p.x * 11},${y - 5.5 + p.y * 11}').join(' ')}"';
+  return '<$geometry fill="${_hex(color)}" stroke="white" stroke-width="1"/>';
+}
+
 String planSvg(Json p, {bool? tablesOnly, bool withGrid = true}) {
   const unit = 100.0;
   final width = number(p['room']['width']) * unit,
@@ -94,12 +102,10 @@ String planSvg(Json p, {bool? tablesOnly, bool withGrid = true}) {
       for (final name in tableMarkers(p, item['id'])) {
         if (mx + 5 > w) {
           mx = 7;
-          my -= 12;
+          my -= 14;
         }
-        svg.write(
-          '<circle cx="$mx" cy="$my" r="4.5" fill="${_hex(markers[name]!)}" stroke="white"/>',
-        );
-        mx += 12;
+        svg.write(planMarkerSvg(name, markers[name]!, mx, my));
+        mx += 14;
       }
       if (conflict) {
         svg.write(

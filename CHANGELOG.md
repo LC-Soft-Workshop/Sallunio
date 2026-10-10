@@ -3,6 +3,12 @@
 Historique en français, établi à partir des validations conservées du projet.
 Les anciennes versions ne constituent pas des livraisons GitHub rétroactives.
 
+## 1.0.43
+
+- Repères distincts sur les tables et dans la légende : hexagone violet pour la mobilité/PMR, triangle rouge pour les allergies, ronds pour les repas. Les emplacements adaptés utilisent un hexagone turquoise.
+- Couleurs des repas plus contrastées : bleu pour le repas normal, vert pour le végétarien, orange pour le sans gluten et gris foncé pour les personnes qui ne mangent pas. Les catégories habituelles conservent leur couleur lors de l'ajout de catégories personnalisées.
+- Repères agrandis pour rendre leurs formes lisibles. Les mêmes formes et couleurs sont conservées dans les plans PDF.
+
 ## 1.0.42
 
 - Magnétisme étendu aux tables seules, sélections et ensembles accolés, ainsi qu'aux zones, obstacles, entrées, sorties et portes. Un ensemble s'accroche par une translation rigide, sans modifier les dimensions ou les positions relatives de ses tables.
