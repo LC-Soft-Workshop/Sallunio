@@ -158,7 +158,7 @@ Future<void> exportPdf(
                     ...ts.expand((table) {
                       final labels = tablePlaceLabels(p, table, geometry);
                       final points = placeLabelPositions(
-                        table,
+                        geometry.view(table),
                         labels.length,
                         geometry.blocked[table['id']] ?? {},
                       );

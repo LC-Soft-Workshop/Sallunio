@@ -3,6 +3,52 @@
 Historique en français, établi à partir des validations conservées du projet.
 Les anciennes versions ne constituent pas des livraisons GitHub rétroactives.
 
+## 1.1.0
+
+Évolutions depuis la dernière version publiée, **1.0.43**. Cette version reste une application Windows locale, sans compte ni envoi des événements sur Internet.
+
+### Parcours des exposants
+
+- Nouveau mode de disposition **Parcours des exposants en S**, disponible pour les événements **Personnalisé, Marché de Noël et Brocante**. Rangées dos à dos, rotations automatiques et tables de fermeture entre les rangées ou à l’extérieur, selon les dimensions disponibles.
+- Deux modes mémorisés : **parcours ouvert**, avec des allées reliées et des raccourcis possibles ; **parcours fermé**, recherchant un chemin imposé sans possibilité de contourner les exposants. Les propositions non réalisables sont signalées sans être remplacées silencieusement par un parcours ouvert.
+- Avec une entrée seule, recherche d’un retour à cette entrée ; avec des entrées et sorties, raccordement des accès au parcours. Les accès multiples et les étapes choisies sont pris en compte, dans les limites des variantes de disposition disponibles.
+- Aperçu du plan actuel dans les options de disposition : les zones à desservir se sélectionnent sur la carte ou dans la liste. Un bar ou une autre étape est rejoint par un bord accessible, sans traverser la zone ni coller une table devant son accès. Une zone libre peut aussi servir d’allée traversable, toujours interdite aux tables.
+- Amélioration du remplissage avec des tailles de tables différentes, comparaison des orientations, disposition autour des zones et rangées simples complémentaires. Une rangée simple réserve de la place pour un seul exposant ; le mode ouvert peut ajouter une rangée sur le mur opposé.
+- Nouvel appui **Tous les murs**. En parcours, seuls les bords de connexion peuvent toucher les murs autorisés ; les côtés d’assise gardent leur réserve. Les petites tables s’alignent du côté visiteurs. Les fermetures restent nécessaires si un bout n’est pas effectivement fermé par un mur.
+- Correction des parcours après redimensionnement d’une entrée et des régressions avec une sortie. Les accès, objets fixés et tables de service conservent leur position. Les tables incompatibles ou en excédent restent hors salle avec une explication, sans créer de chevauchement.
+- Tracé bleu, flèches et réserves exposants affichables ou masquables, également dans le PDF. Un plan modifié demande un recalcul des repères devenus obsolètes. Les tables restent au premier plan et les zones visibles restent sélectionnables au-dessus des zones invisibles.
+- Calcul de disposition en arrière-plan, animation visible et blocage des clics répétés. En cas d’échec, le plan précédent est conservé ; annuler une disposition reste possible.
+
+### Écarts de jonction
+
+- Espacement hiérarchique : **réglage général du mobilier → type de mobilier → table du plan**, cette dernière étant prioritaire. Une valeur personnalisée de zéro signifie un contact direct, et non un héritage.
+- Choix du premier bord, du second ou des deux, suivant la rotation et les côtés d’accolement autorisés. Une jonction utilise la plus grande des deux valeurs demandées, une seule fois. Le magnétisme et les dispositions tiennent compte de ces réglages.
+- Saisie en **mètres**, avec virgule acceptée : **0,60 = 60 cm**. Les valeurs précédemment sauvegardées sont conservées.
+- Dans les propriétés d’une table, ouverture immédiate des jonctions existantes par déplacement local des voisins, sans redisposition globale. La table éditée reste ancrée ; dimensions, rotations et attributions sont conservées. Les déplacements sont refusés ensemble si un objet fixé, un mur ou un obstacle bloque l’ouverture, et restent annulables.
+
+### Proximité et accès PMR
+
+- Les **zones libres, entrées et sorties** proposent **Inclure dans les préférences de proximité : Oui / Non**. Les éléments activés apparaissent sous leur nom dans les réservations, avec les choix **Sans préférence / Proche / Loin**. Une zone peut ainsi représenter librement un bar, une cuisine, une scène ou des toilettes.
+- Renommer un élément conserve les souhaits ; le désactiver ou le supprimer retire les souhaits associés. Les sauvegardes complètes conservent ces liens. L’import partiel ne conserve que les références aux éléments effectivement présents/importés.
+- Entrées et sorties : **Tous publics**, **PMR avec accompagnants** ou **Non-PMR uniquement**. Une entrée unique ou une sortie unique reste commune à tous. Avec plusieurs accès de la même catégorie, les choix suivent les besoins de mobilité des personnes du groupe, accompagnants compris. Les souhaits devenus incompatibles sont signalés en privé et ignorés par l’attribution.
+- Les entrées et sorties gardent leur rôle dans les parcours. Les anciens objets Toilettes des essais sont conservés comme zones libres ; aucun nouveau type Toilettes n’est imposé.
+- Les souhaits de proximité et leurs vérifications restent dans les réservations et sont absents de tous les PDF publics. Aucune justification personnelle n’est demandée.
+
+### Confort propre à chaque événement
+
+- Nouveau menu **Confort** dans le plan et la vue Événements : largeur des places ordinaires/PMR, profondeur des assises/fauteuils, allées libres ordinaires/PMR, écarts entre tables et murs, réserves dos à dos et au mur en parcours.
+- Bouton **Proposer des valeurs confortables**, adapté au repas ou aux autres activités, avec explications écrites et lien vers les repères officiels d’accessibilité. Les allées libres sont distinguées des profondeurs d’assise ; la distance entre tables est mesurée bord à bord une seule fois.
+- Capacités utilisables, enveloppes d’assise, dispositions, magnétisme et contrôles suivent ces valeurs. Les plans existants conservent leurs anciens réglages tant que le confort n’est pas configuré. Enregistrer ne déplace pas les tables : relancer la disposition ou l’attribution applique les nouveaux repères.
+- Priorité aux places adaptées et aux places proches des allées principales pour les personnes en fauteuil ou ayant un autre besoin de mobilité. Une zone peut être marquée **Allée principale pour le placement PMR** ; à défaut, le parcours et les passages larges repérés servent d’indications. Les places imposées et attributions verrouillées restent conservées. Ce placement aide à organiser la salle sans certifier la continuité du trajet.
+- Retrait du réglage Passage des contrôles de préparation : les espacements se règlent uniquement au niveau du confort de l’événement.
+
+### Fichiers, publication et données
+
+- Retrait de l’entrée isolée CSV dans Fichiers ; **Exporter CSV** reste disponible. L’import CSV des réservations reste accessible depuis Réservations.
+- README réorganisé avec les fonctions, les nouveautés, les étapes d’utilisation, les précautions de mise à jour et le téléchargement permanent de la dernière version.
+- Validation du code, tests fonctionnels et contrôles de publication ; paquet Windows construit à partir d’une liste fermée de fichiers, accompagné d’une empreinte SHA-256. Aucune base, réservation, sauvegarde ou export utilisateur n’est inclus dans le dépôt ou le ZIP.
+- Les mises à jour conservent la base personnelle séparée des exécutables. Les essais locaux continuent d’utiliser un seul dossier Tableo-test, sans créer de numéros de version supplémentaires.
+
 ## 1.0.43
 
 - Repères distincts sur les tables et dans la légende : hexagone violet pour la mobilité/PMR, triangle rouge pour les allergies, ronds pour les repas. Les emplacements adaptés utilisent un hexagone turquoise.

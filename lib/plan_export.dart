@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'domain.dart';
+import 'parcours.dart';
 
 bool visibleInPlanPdf(Json item) =>
     !(item['kind'] == 'zone' && item['zoneFill'] == 'Invisible');
@@ -46,6 +47,28 @@ String planSvg(Json p, {bool? tablesOnly, bool withGrid = true}) {
     }
   }
   var index = 0;
+  if (tablesOnly != true && p['showParcours'] != false) {
+    if (parcoursCurrent(p)) {
+      for (final b in p['parcoursPlan']['blocks'] as List) {
+        svg.write(
+          '<rect x="${number(b['x']) * unit}" y="${number(b['y']) * unit}" width="${number(b['w']) * unit}" height="${number(b['h']) * unit}" fill="#bf8f20" fill-opacity="0.08"/>',
+        );
+      }
+    }
+    for (final route in parcoursPaths(p)) {
+      final points = route.map((v) => '${v.x * unit},${v.y * unit}').join(' ');
+      svg.write(
+        '<polyline points="$points" fill="none" stroke="#1565c0" stroke-width="3" stroke-linejoin="round"/>',
+      );
+    }
+  }
+  if (tablesOnly != true && p['showParcours'] != false && parcoursCurrent(p)) {
+    for (final arrow in parcoursArrows(p)) {
+      svg.write(
+        '<polyline points="${arrow.map((v) => '${v.x * unit},${v.y * unit}').join(' ')}" fill="none" stroke="#1565c0" stroke-width="3"/>',
+      );
+    }
+  }
   for (final item in planPaintOrder(p).where(visibleInPlanPdf)) {
     if (tablesOnly != null && (item['kind'] == 'table') != tablesOnly) continue;
     final x = number(item['x']) * unit, y = number(item['y']) * unit;
@@ -77,7 +100,17 @@ String planSvg(Json p, {bool? tablesOnly, bool withGrid = true}) {
     final conflict =
         item['kind'] == 'table' &&
         !fits(p, item, rows(p, 'items'), geometry: geometry);
-    final stroke = conflict ? '#ff0000' : '#527567';
+    final served =
+        p['showParcours'] != false &&
+        parcoursCurrent(p) &&
+        (p['parcoursPlan']['services'] as List? ?? []).any(
+          (s) => s['id'] == item['id'],
+        );
+    final stroke = conflict
+        ? '#ff0000'
+        : served
+        ? '#1565c0'
+        : '#527567';
     svg.write(
       '<g transform="translate($x $y)"><$shape fill="$fill"/><defs><clipPath id="clip$index"><$shape/></clipPath></defs>',
     );

@@ -103,6 +103,10 @@ Json injectEventBackup(
           }
         }
         copy['separate'] = groupIds[group['separate']] ?? '';
+        copy['placeProximity'] = {
+          for (final entry in (group['placeProximity'] as Map? ?? {}).entries)
+            if (itemIds.containsKey(entry.key)) itemIds[entry.key]: entry.value,
+        };
         copy['proximity'] = {
           for (final entry in (group['proximity'] as Map? ?? {}).entries)
             if (groupIds.containsKey(entry.key))

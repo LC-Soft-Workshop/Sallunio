@@ -23,6 +23,8 @@ class MemoryStore extends Store {
   Future<void> save(Json p) async {}
 }
 
+Future<Json> immediateArrangement(Json p) async => arrangeProject(p);
+
 void main() {
   testWidgets(
     'Selected table types bulk action is visible and preserves plan until chosen',

@@ -96,6 +96,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Fichiers ▾'));
     await tester.pumpAndSettle();
+    expect(find.text('CSV'), findsNothing);
     await tester.tap(find.text('Exporter CSV'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Exporter'));

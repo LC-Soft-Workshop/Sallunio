@@ -8,6 +8,7 @@ import 'event_backup.dart';
 import 'backup_merge.dart';
 
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math';
 import 'dart:ui' as ui;
 
@@ -18,6 +19,9 @@ import 'domain.dart';
 import 'plan_tools.dart';
 import 'magnetism.dart';
 import 'plan_marker.dart';
+import 'parcours.dart';
+import 'parcours_painter.dart';
+import 'parcours_snapshot.dart';
 
 import 'package:flutter/services.dart';
 
@@ -26,6 +30,14 @@ import 'exports.dart';
 import 'csv_example.dart';
 import 'csv_delta.dart';
 import 'file_dialogs.dart';
+
+Json arrangeProject(Json project) {
+  arrange(project);
+  return project;
+}
+
+Future<Json> arrangeInBackground(Json project) =>
+    Isolate.run(() => arrangeProject(project));
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -61,6 +73,111 @@ void main(List<String> args) async {
         );
       }
       await exportPdf(restored.first, '${args[1]}/runtime-plan.pdf');
+      final market = newProject('Marché fictif — test natif');
+      market['room'].addAll({'width': 18.0, 'height': 12.0});
+      market['activity'] = 'Marché de Noël';
+      market['mealService'] = 'Non';
+      market['arrangementMode'] = 'Parcours';
+      market['parcoursSettings'] = {
+        'orientation': 'Automatique',
+        'closure': 'À l’extérieur',
+        'exhibitorGap': 1.2,
+      };
+      final template = tables(demoProject()).first;
+      market['items'] = <Json>[
+        for (var i = 0; i < 20; i++)
+          {
+            ...clone(template),
+            'id': 'native-parcours-$i',
+            'label': 'T${i + 1}',
+            'fixed': false,
+          },
+        {
+          'id': 'native-entry',
+          'label': 'Entrée',
+          'kind': 'entry',
+          'shape': 'rectangle',
+          'fixed': false,
+          'x': 0.0,
+          'y': 0.0,
+          'w': .6,
+          'h': .6,
+        },
+        {
+          'id': 'native-exit',
+          'label': 'Sortie',
+          'kind': 'exit',
+          'shape': 'rectangle',
+          'fixed': false,
+          'x': 17.4,
+          'y': 11.4,
+          'w': .6,
+          'h': .6,
+        },
+        {
+          'id': 'native-bar',
+          'kind': 'zone',
+          'shape': 'rectangle',
+          'fixed': false,
+          'label': 'Bar fictif',
+          'x': 8.0,
+          'y': 4.0,
+          'w': 2.0,
+          'h': 2.0,
+          'zoneFill': 'Hachures',
+          'zoneColor': 'Bleu',
+          'parcoursAccess': 'À desservir',
+        },
+      ];
+      if (arrange(market) != 0 || parcoursWarnings(market).isNotEmpty) {
+        throw StateError('Parcours natif incomplet');
+      }
+      await store.save(market);
+      final restoredMarket = (await store.load()).firstWhere(
+        (event) => event['id'] == market['id'],
+      );
+      validateProject(restoredMarket);
+      if (!parcoursCurrent(restoredMarket)) {
+        throw StateError('Parcours non conservé en base');
+      }
+      if ((restoredMarket['parcoursPlan']['services'] as List).isEmpty) {
+        throw StateError('Bar non desservi dans le test natif');
+      }
+      await exportPdf(restoredMarket, '${args[1]}/runtime-parcours.pdf');
+      final imposed = clone(market);
+      imposed['id'] = 'native-imposed';
+      imposed['label'] = 'Parcours imposé fictif';
+      imposed['wallSupport'] = 'Tous les murs';
+      imposed['parcoursSettings'] = {
+        'orientation': 'Horizontale',
+        'closure': 'À l’extérieur',
+        'exhibitorGap': 1.2,
+        'imposedLoop': true,
+      };
+      imposed['items'] = <Json>[
+        for (var i = 0; i < 42; i++)
+          {
+            ...clone(template),
+            'id': 'imposed-$i',
+            'label': 'T${i + 1}',
+            'fixed': false,
+          },
+        clone(rows(market, 'items').firstWhere((i) => i['kind'] == 'entry')),
+      ];
+      final computed = await arrangeInBackground(imposed);
+      if (parcoursWarnings(computed).isNotEmpty ||
+          !tables(computed).any((t) => t['parcoursRole'] == 'spine')) {
+        throw StateError('Boucle imposée native invalide');
+      }
+      await store.save(computed);
+      final restoredImposed = (await store.load()).firstWhere(
+        (e) => e['id'] == 'native-imposed',
+      );
+      validateProject(restoredImposed);
+      if (!parcoursCurrent(restoredImposed)) {
+        throw StateError('Boucle imposée non conservée en base');
+      }
+      await exportPdf(restoredImposed, '${args[1]}/runtime-imposed.pdf');
       await File('${args[1]}/runtime-report.json').writeAsString(
         jsonEncode({
           'sqlite': restored.length == 1,
@@ -76,6 +193,9 @@ void main(List<String> args) async {
           },
           'countersMatchSummary': true,
           'workspaceCounters': workspaceStats(restored.first),
+          'parcoursNative': true,
+          'imposedLoopNative': true,
+          'parcoursTables': tables(restoredMarket).length,
         }),
       );
       await store.close();
@@ -114,6 +234,7 @@ void main(List<String> args) async {
 }
 
 class Tableo extends StatefulWidget {
+  final Future<Json> Function(Json)? arrangementRunner;
   final Store store;
   final FileDialogs? fileDialogs;
   final UpdateService? updateService;
@@ -121,6 +242,7 @@ class Tableo extends StatefulWidget {
   const Tableo({
     super.key,
     required this.store,
+    this.arrangementRunner,
     this.fileDialogs,
     this.updateService,
     this.linkOpener,
@@ -185,6 +307,7 @@ class _TableoState extends State<Tableo> {
     darkTheme: appTheme(Brightness.dark),
     themeMode: darkMode ? ThemeMode.dark : ThemeMode.light,
     home: Home(
+      arrangementRunner: widget.arrangementRunner,
       store: widget.store,
       fileDialogs: widget.fileDialogs,
       updateService: widget.updateService,
@@ -196,6 +319,7 @@ class _TableoState extends State<Tableo> {
 }
 
 class Home extends StatefulWidget {
+  final Future<Json> Function(Json)? arrangementRunner;
   final Store store;
   final FileDialogs? fileDialogs;
   final UpdateService? updateService;
@@ -205,6 +329,7 @@ class Home extends StatefulWidget {
   const Home({
     super.key,
     required this.store,
+    this.arrangementRunner,
     this.fileDialogs,
     this.updateService,
     this.linkOpener,
@@ -241,6 +366,7 @@ class _HomeState extends State<Home> {
   double resizeDx = 0, resizeDy = 0;
   int page = 0;
   bool saving = false;
+  bool arranging = false, arrangementDialogOpen = false;
   bool loaded = false;
   int pendingWrites = 0;
   String status = 'Chargement…';
@@ -424,7 +550,10 @@ class _HomeState extends State<Home> {
 
   void change(void Function() action) {
     checkpoint();
-    setState(action);
+    setState(() {
+      action();
+      prunePlacePreferences(p!);
+    });
     persist();
   }
 
@@ -538,7 +667,10 @@ class _HomeState extends State<Home> {
         ],
         child: const Padding(
           padding: EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-          child: Text('Version $appVersion', style: TextStyle(fontSize: 12)),
+          child: Text(
+            'Version $appVersionLabel',
+            style: TextStyle(fontSize: 12),
+          ),
         ),
       ),
     ],
@@ -719,21 +851,29 @@ class _HomeState extends State<Home> {
                                   )
                                   .toList(),
                               key: ValueKey('${e.key}-${values[e.key]}'),
-                              onChanged: (v) => update(() {
-                                values[e.key] = v;
-                                if (autoObjectLabel &&
-                                    e.key == 'kind' &&
-                                    !labelModified) {
-                                  controls['label']!.text =
-                                      objectLabels[v] ?? v!;
-                                  values['label'] = controls['label']!.text;
-                                }
-                                onChoiceChanged?.call(values, e.key);
-                              }),
+                              onChanged:
+                                  e.key == '_joinGapSides' &&
+                                      values['_joinGapMode'] == 'Hériter'
+                                  ? null
+                                  : (v) => update(() {
+                                      values[e.key] = v;
+                                      if (autoObjectLabel &&
+                                          e.key == 'kind' &&
+                                          !labelModified) {
+                                        controls['label']!.text =
+                                            objectLabels[v] ?? v!;
+                                        values['label'] =
+                                            controls['label']!.text;
+                                      }
+                                      onChoiceChanged?.call(values, e.key);
+                                    }),
                               decoration: InputDecoration(labelText: e.value),
                             )
                           : TextField(
                               controller: controls[e.key],
+                              enabled:
+                                  e.key != '_joinGapM' ||
+                                  values['_joinGapMode'] != 'Hériter',
                               maxLines: e.key == 'note' ? 3 : 1,
                               maxLength: e.key == 'note' ? 1000 : null,
                               onChanged: (_) {
@@ -741,7 +881,12 @@ class _HomeState extends State<Home> {
                                   labelModified = true;
                                 }
                               },
-                              decoration: InputDecoration(labelText: e.value),
+                              decoration: InputDecoration(
+                                labelText: e.value,
+                                helperText: e.key == '_joinGapM'
+                                    ? '0,60 m = 60 cm'
+                                    : null,
+                              ),
                             ),
                     ),
                   ),
@@ -770,10 +915,17 @@ class _HomeState extends State<Home> {
                   final v = double.tryParse(
                     '${values[k]}'.replaceAll(',', '.'),
                   );
-                  if (v == null || !v.isFinite || v <= 0 || v > 200) {
+                  if (k == '_joinGapM' && values['_joinGapMode'] == 'Hériter') {
+                    continue;
+                  }
+                  if (v == null ||
+                      !v.isFinite ||
+                      (k == '_joinGapM' ? v < 0 : v <= 0) ||
+                      v > (k == '_joinGapM' ? 2 : 200)) {
                     update(
-                      () => error =
-                          '${labels[k]} : valeur entre 0 et 200, strictement positive.',
+                      () => error = k == '_joinGapM'
+                          ? 'Espacement de jonction : nombre de 0 à 2 m.'
+                          : '${labels[k]} : valeur entre 0 et 200, strictement positive.',
                     );
                     return;
                   }
@@ -855,6 +1007,156 @@ class _HomeState extends State<Home> {
       }
     },
   );
+
+  Future<void> comfortEdit(Json event) async {
+    final initial = event['comfort'] == null && rows(event, 'items').isEmpty
+        ? comfortableDefaults(event)
+        : eventComfort(event);
+    final controls = {
+      for (final key in comfortFieldLabels.keys)
+        key: TextEditingController(text: '${initial[key]}'),
+    };
+    var prefer = initial['preferMainAisles'] == 'Oui';
+    String? error;
+    Json? accepted;
+    final route = DialogRoute<void>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, update) => AlertDialog(
+          title: Text('Confort de ${event['name']}'),
+          content: SizedBox(
+            width: 600,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Réglages propres à cet événement • ${eventActivity(event)}${mealsEnabled(event) ? ' avec repas' : ' sans repas'}. Toutes les distances sont en mètres.',
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Une allée est mesurée libre d’assises. L’écart entre deux tables n’est compté qu’une fois, bord à bord. Hors jonctions, la disposition conserve au moins les deux profondeurs d’assise plus l’allée libre. Avec PMR, elle utilise la largeur d’allée PMR.',
+                  ),
+                  TextButton.icon(
+                    key: const ValueKey('comfort-recommended'),
+                    icon: const Icon(Icons.auto_awesome_outlined),
+                    label: const Text('Proposer des valeurs confortables'),
+                    onPressed: () => update(() {
+                      final proposed = comfortableDefaults(event);
+                      for (final key in controls.keys) {
+                        controls[key]!.text = '${proposed[key]}';
+                      }
+                      prefer = true;
+                      error = null;
+                    }),
+                  ),
+                  const Text(
+                    'Repères proposés : 60 à 65 cm par personne ; 90 cm pour une place PMR, avec 1,30 m de profondeur ; 1,20 m d’allée courante et 1,50 m avec PMR. Pour un repas, 2,40 m entre tables laisse deux assises de 60 cm et une allée de 1,20 m. Ajuster aux fauteuils, au service et à la fréquentation.',
+                  ),
+                  const SizedBox(height: 12),
+                  for (final entry in comfortFieldLabels.entries)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: TextField(
+                        key: ValueKey('comfort-${entry.key}'),
+                        controller: controls[entry.key],
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: entry.value,
+                          helperText: entry.key == 'exhibitorGap'
+                              ? 'Réserve privée pour les deux rangées d’exposants, indépendante de l’allée visiteurs.'
+                              : entry.key == 'parcoursWallGap'
+                              ? 'Derrière une rangée simple ; l’appui autorisé reste réservé aux bords de connexion.'
+                              : null,
+                        ),
+                      ),
+                    ),
+                  CheckboxListTile(
+                    key: const ValueKey('comfort-main-aisles'),
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text(
+                      'Privilégier les places PMR près des allées principales',
+                    ),
+                    value: prefer,
+                    onChanged: (v) => update(() => prefer = v!),
+                  ),
+                  const Text(
+                    'Les places adaptées sont prioritaires. L’attribution privilégie ensuite celles proches des allées principales repérées ou des passages du parcours. Une zone libre peut être marquée « Allée principale ». Les places individuelles déjà imposées et les attributions verrouillées restent conservées.',
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Les repères aident à préparer le plan ; vérifier sur place la continuité du trajet et les espaces de manœuvre. Le logiciel ne certifie pas l’accessibilité.',
+                  ),
+                  TextButton(
+                    onPressed: () => openGithub(
+                      Uri.parse(
+                        'https://www.legifrance.gouv.fr/jorf/id/JORFARTI000034485474',
+                      ),
+                    ),
+                    child: const Text('Repères officiels d’accessibilité'),
+                  ),
+                  if (error != null)
+                    Text(error!, style: const TextStyle(color: Colors.red)),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final settings = <String, dynamic>{
+                  for (final entry in controls.entries)
+                    entry.key: number(entry.value.text, -1),
+                  'preferMainAisles': prefer ? 'Oui' : 'Non',
+                };
+                final candidate = clone(event)..['comfort'] = settings;
+                candidate['aisle'] = settings['tableGap'];
+                try {
+                  validateProject(candidate);
+                } catch (e) {
+                  update(() => error = '$e');
+                  return;
+                }
+                accepted = settings;
+                Navigator.pop(c);
+              },
+              child: const Text('Enregistrer'),
+            ),
+          ],
+        ),
+      ),
+    );
+    await Navigator.of(context).push(route);
+    await route.completed;
+    for (final control in controls.values) {
+      control.dispose();
+    }
+    if (accepted == null) return;
+    void apply() {
+      event['comfort'] = accepted;
+      event['aisle'] = accepted!['tableGap'];
+      if (event['parcoursSettings'] is Map) {
+        event['parcoursSettings']['exhibitorGap'] = accepted!['exhibitorGap'];
+      }
+    }
+
+    if (event['id'] == p?['id']) {
+      change(apply);
+    } else {
+      setState(apply);
+      await widget.store.save(event);
+    }
+    toast(
+      'Confort enregistré. Positions et attributions conservées ; relancer la disposition ou l’attribution pour appliquer les nouveaux repères.',
+    );
+  }
 
   Future<void> eventProperties(Json event) async {
     var activity = eventActivity(event);
@@ -1242,24 +1544,30 @@ class _HomeState extends State<Home> {
     final old = type;
     final t = await form(
       'Type de mobilier',
-      type ??
-          {
-            'id': uid(),
-            'name': 'Nouvelle table',
-            'shape': 'rectangle',
-            'w': 1.8,
-            'h': .8,
-            'capacity': eventSeatingSides(p!) == 'Un côté' ? 3 : 6,
-            'sides': eventSeatingSides(p!),
-            'seatSide': 'Bas',
-            'quantity': 10,
-            'limit': 10,
-            'source': 'Propre',
-            'enabled': true,
-            'seating': 'Chaises',
-          },
+      joinGapFormValues(
+        type ??
+            {
+              'id': uid(),
+              'name': 'Nouvelle table',
+              'shape': 'rectangle',
+              'w': 1.8,
+              'h': .8,
+              'capacity': eventSeatingSides(p!) == 'Un côté' ? 3 : 6,
+              'sides': eventSeatingSides(p!),
+              'seatSide': 'Bas',
+              'quantity': 10,
+              'limit': 10,
+              'source': 'Propre',
+              'enabled': true,
+              'seating': 'Chaises',
+            },
+      ),
       {
         'name': 'Nom du type',
+        '_joinGapMode':
+            'Jonctions : hériter du réglage général ou personnaliser',
+        '_joinGapM': 'Espacement de jonction (m, 0 = contact)',
+        '_joinGapSides': 'Bords concernés (suivent la rotation)',
         'shape': 'Forme',
         'w': 'Longueur ou diamètre (m)',
         'h': 'Largeur (m), ignorée pour cercle/carré',
@@ -1272,16 +1580,19 @@ class _HomeState extends State<Home> {
         'seating': 'Assises',
       },
       choices: {
+        '_joinGapMode': ['Hériter', 'Personnaliser'],
+        '_joinGapSides': joinGapSideNames,
         'shape': ['rectangle', 'carré', 'cercle', 'banc'],
         'source': ['Propre', 'Salle', 'Emprunté'],
         'seating': ['Chaises', 'Bancs', 'Mixte'],
         'sides': seatingModes,
         'seatSide': seatingSideNames,
       },
-      numeric: {'w', 'h'},
+      numeric: {'w', 'h', '_joinGapM'},
       integer: {'capacity', 'quantity', 'limit'},
     );
     if (t == null) return;
+    saveJoinGapForm(t);
     if (t['limit'] > t['quantity']) {
       toast('La limite ne peut pas dépasser le stock.');
       return;
@@ -1511,6 +1822,52 @@ class _HomeState extends State<Home> {
       ],
     ),
   );
+  Json joinGapFormValues(Json owner) {
+    final resolved = owner['joinGap'] != null
+        ? owner
+        : tableJoinSettings(p!, owner);
+    return {
+      ...owner,
+      '_joinGapMode': owner['joinGap'] == null ? 'Hériter' : 'Personnaliser',
+      '_joinGapM': number(resolved['joinGap']),
+      '_joinGapSides': resolved['joinGapSides'] ?? joinGapSideNames.first,
+    };
+  }
+
+  void saveJoinGapForm(Json owner) {
+    if (owner.remove('_joinGapMode') == 'Personnaliser') {
+      owner['joinGap'] = number(owner['_joinGapM']);
+      owner['joinGapSides'] = owner['_joinGapSides'];
+    } else {
+      owner.remove('joinGap');
+      owner.remove('joinGapSides');
+    }
+    owner.remove('_joinGapM');
+    owner.remove('_joinGapSides');
+  }
+
+  Future<void> joinGapDefaultsEdit() async {
+    final value = await form(
+      'Jonctions — réglage général du mobilier',
+      {...joinGapFormValues(p!), '_joinGapMode': 'Personnaliser'},
+      {
+        '_joinGapM': 'Espacement entre tables jointes (m, 0 = contact)',
+        '_joinGapSides': 'Bords concernés',
+      },
+      numeric: {'_joinGapM'},
+      choices: {'_joinGapSides': joinGapSideNames},
+    );
+    if (value == null) return;
+    saveJoinGapForm(value);
+    change(() {
+      p!['joinGap'] = value['joinGap'];
+      p!['joinGapSides'] = value['joinGapSides'];
+    });
+    toast(
+      'Réglage enregistré. Les positions restent conservées ; relancer la disposition pour appliquer les nouveaux écarts.',
+    );
+  }
+
   Widget joiningSettings() => Padding(
     padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
     child: Card(
@@ -1533,10 +1890,18 @@ class _HomeState extends State<Home> {
                 onChanged: (m) => change(() => p!['joining'] = m),
               ),
             ),
+            TextButton.icon(
+              key: const ValueKey('join-gap-defaults'),
+              onPressed: joinGapDefaultsEdit,
+              icon: const Icon(Icons.settings_ethernet),
+              label: Text(
+                'Écart : ${(number(p!['joinGap']) * 100).toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '')} cm',
+              ),
+            ),
             const SizedBox(width: 16),
             const Expanded(
               child: Text(
-                'Faces autorisées en contact, centres alignés, même entre dimensions différentes. Glisser près d’un bord pour accrocher (14 cm). Rondes séparées. Assises contre une table ou un mur retirées ; capacité recalculée.',
+                'Centres alignés. Écart : table → type → réglage général. Le plus grand écart est retenu une seule fois. Rondes séparées.',
                 style: TextStyle(fontSize: 12),
               ),
             ),
@@ -1589,19 +1954,49 @@ class _HomeState extends State<Home> {
   Future<void> itemEdit(Json t) async {
     final v = await form(
       'Modifier ${t['label']}',
-      t,
+      {
+        ...t,
+        if (isPlanAccess(t))
+          'accessAudience': t['accessAudience'] ?? accessAudiences.first,
+        if (canIncludeInProximity(t))
+          'proximityEnabled': t['proximityEnabled'] ?? 'Non',
+        if (t['kind'] == 'table') ...joinGapFormValues(t),
+        if (t['kind'] == 'table') '_applyJoinGapNow': 'Oui',
+        if (t['kind'] == 'zone') 'mainAisle': t['mainAisle'] ?? 'Non',
+        if (t['kind'] == 'zone')
+          'parcoursAccess': t['parcoursAccess'] ?? 'À exclure',
+        if (t['kind'] == 'zone')
+          'parcoursPassage': t['parcoursPassage'] ?? 'Non',
+      },
       {
         'label': 'Libellé',
+        if (isPlanAccess(t))
+          'accessAudience':
+              rows(p!, 'items').where((i) => i['kind'] == t['kind']).length == 1
+              ? 'Public autorisé (accès unique : commun à tous)'
+              : 'Public autorisé',
+        if (canIncludeInProximity(t))
+          'proximityEnabled': 'Inclure dans les préférences de proximité',
         'x': 'X (m)',
         'y': 'Y (m)',
         'w': 'Longueur / diamètre (m)',
         'h': 'Largeur (m)',
         if (t['kind'] == 'zone') ...{
+          'mainAisle': 'Allée principale pour le placement PMR',
           'zoneColor': 'Couleur',
           'zoneFill': 'Remplissage',
+          if (parcoursAvailable(p!))
+            'parcoursAccess': 'Rôle dans le parcours visiteurs',
+          if (parcoursAvailable(p!))
+            'parcoursPassage': 'Traversable par les visiteurs (allée)',
         },
         if (t['kind'] == 'table') ...{
           'note': 'Note d’organisation (interne)',
+          '_joinGapMode': 'Jonctions : hériter du type ou personnaliser',
+          '_joinGapM': 'Espacement de jonction (m, 0 = contact)',
+          '_joinGapSides': 'Bords concernés (suivent la rotation)',
+          '_applyJoinGapNow':
+              'Appliquer l’écart aux jonctions existantes maintenant',
           'capacity': 'Capacité individuelle (0 = service)',
           'seating': 'Assises',
           'sides': 'Côtés assis',
@@ -1609,12 +2004,20 @@ class _HomeState extends State<Home> {
         },
         if (t['kind'] == 'door') 'opening': 'Sens ouverture (indicatif)',
       },
-      numeric: {'w', 'h'},
+      numeric: {'w', 'h', if (t['kind'] == 'table') '_joinGapM'},
       integer: {if (t['kind'] == 'table') 'capacity'},
       choices: {
+        if (isPlanAccess(t)) 'accessAudience': accessAudiences,
+        if (canIncludeInProximity(t)) 'proximityEnabled': ['Non', 'Oui'],
+        if (t['kind'] == 'table') '_joinGapMode': ['Hériter', 'Personnaliser'],
+        if (t['kind'] == 'table') '_joinGapSides': joinGapSideNames,
+        if (t['kind'] == 'table') '_applyJoinGapNow': ['Oui', 'Non'],
         if (t['kind'] == 'zone') ...{
+          'mainAisle': ['Non', 'Oui'],
           'zoneColor': zoneColors.keys.toList(),
           'zoneFill': zoneFills,
+          if (parcoursAvailable(p!)) 'parcoursAccess': parcoursZoneAccess,
+          if (parcoursAvailable(p!)) 'parcoursPassage': ['Non', 'Oui'],
         },
         if (t['kind'] == 'table') 'seating': ['Chaises', 'Bancs', 'Mixte'],
         if (t['kind'] == 'table') 'sides': seatingModes,
@@ -1629,6 +2032,7 @@ class _HomeState extends State<Home> {
       },
     );
     if (v != null) {
+      if (t['kind'] == 'table') saveJoinGapForm(v);
       for (final k in ['x', 'y']) {
         final n = double.tryParse('${v[k]}'.replaceAll(',', '.'));
         if (n == null || !n.isFinite || n < 0) {
@@ -1638,9 +2042,16 @@ class _HomeState extends State<Home> {
         v[k] = n;
       }
       if (['cercle', 'carré'].contains(v['shape'])) v['h'] = v['w'];
+      final applyGap = v.remove('_applyJoinGapNow') == 'Oui';
+      final before = clone(p!);
+      String? result;
       change(() {
         rows(p!, 'items')[rows(p!, 'items').indexOf(t)] = v;
+        if (applyGap && t['kind'] == 'table') {
+          result = applyTableJoinGapLocally(p!, before, v['id'] as String);
+        }
       });
+      if (result != null) toast(result!);
     }
   }
 
@@ -1705,6 +2116,7 @@ class _HomeState extends State<Home> {
       'groups',
     ).where((g) => g['id'] != group['id']).toList();
     final draft = reservationPreferences(p!, group);
+    final placeDraft = reservationPlacePreferences(group);
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
@@ -1718,15 +2130,55 @@ class _HomeState extends State<Home> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Préférences entre réservations, dans les deux sens. Proche : repère 3 m. Loin : repère ${farPreferenceDistance(p!).toStringAsFixed(1)} m. Distances entre centres des tables ; priorité à l’éloignement si les souhaits se concurrencent. Relancer l’attribution après modification.',
+                    'Préférences entre réservations, dans les deux sens, et avec les zones et accès activés sur le plan. Proche : repère 3 m. Loin : repère ${farPreferenceDistance(p!).toStringAsFixed(1)} m. Distances entre centres des tables ; priorité à l’éloignement si les souhaits se concurrencent. Relancer l’attribution après modification.',
                   ),
-                  if (others.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 10),
+                    child: Text(
+                      'Accès : une entrée ou sortie unique est commune à tous. Avec plusieurs accès, les choix tiennent compte de la mobilité des personnes du groupe, accompagnants compris.',
+                    ),
+                  ),
+                  if (proximityTargets(p!).any(
+                    (item) =>
+                        !accessCompatible(p!, item, group) &&
+                        placeDraft.containsKey(item['id']),
+                  ))
                     const Padding(
-                      padding: EdgeInsets.only(top: 12),
+                      padding: EdgeInsets.only(top: 10),
                       child: Text(
-                        'Ajouter une autre réservation pour définir une préférence.',
+                        'Un souhait enregistré concerne un accès devenu incompatible. Il sera retiré en enregistrant ces préférences.',
                       ),
                     ),
+                  ...groupProximityTargets(p!, group).map(
+                    (place) => Padding(
+                      padding: const EdgeInsets.only(top: 14),
+                      child: DropdownButtonFormField<String>(
+                        key: ValueKey('proximity-place-${place['id']}'),
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: proximityTargetName(place),
+                        ),
+                        initialValue: placeDraft[place['id']] ?? '',
+                        items: const [
+                          DropdownMenuItem(
+                            value: '',
+                            child: Text('Sans préférence'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'near',
+                            child: Text('Proche'),
+                          ),
+                          DropdownMenuItem(value: 'far', child: Text('Loin')),
+                        ],
+                        onChanged: (value) => update(() {
+                          placeDraft.remove(place['id']);
+                          if (value != null && value.isNotEmpty) {
+                            placeDraft[place['id'] as String] = value;
+                          }
+                        }),
+                      ),
+                    ),
+                  ),
                   ...others.map(
                     (other) => Padding(
                       padding: const EdgeInsets.only(top: 14),
@@ -1776,6 +2228,14 @@ class _HomeState extends State<Home> {
     );
     if (ok == true) {
       change(() {
+        final allowed = groupProximityTargets(
+          p!,
+          group,
+        ).map((item) => item['id']).toSet();
+        group['placeProximity'] = {
+          for (final entry in placeDraft.entries)
+            if (allowed.contains(entry.key)) entry.key: entry.value,
+        };
         for (final other in others) {
           setReservationPreference(
             p!,
@@ -1961,8 +2421,12 @@ class _HomeState extends State<Home> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Réserver un emplacement pour un fauteuil. La largeur supplémentaire réduit la capacité : une place ordinaire utilise le repère de 60 cm. La profondeur réserve le dégagement des assises. Dimensions à ajuster à votre situation.',
+                      'Réserver un emplacement pour un fauteuil. La largeur supplémentaire réduit la capacité : une place ordinaire suit le réglage de confort de l’événement. La profondeur réserve le dégagement des assises. Dimensions à ajuster à votre situation.',
                     ),
+                    if (p!['comfort'] != null)
+                      Text(
+                        'Minimums de l’événement : ${eventComfort(p!)["pmrSeatWidth"]} m de largeur et ${eventComfort(p!)["pmrDepth"]} m de profondeur. Un emplacement individuel peut réserver davantage.',
+                      ),
                     Text(
                       '${table['capacity']} places déclarées → $capacity places utilisables ; ${occupancy(p!, table['id'])} personnes attribuées.',
                     ),
@@ -2039,8 +2503,10 @@ class _HomeState extends State<Home> {
                                   capacity,
                                   (i) => i,
                                 ).firstWhere((i) => !used.contains(i)),
-                                'width': .9,
-                                'depth': 1.2,
+                                'width': number(
+                                  eventComfort(p!)['pmrSeatWidth'],
+                                ),
+                                'depth': number(eventComfort(p!)['pmrDepth']),
                               });
                             }),
                     ),
@@ -3612,8 +4078,6 @@ class _HomeState extends State<Home> {
             onSelected: (v) {
               if (v == 'Exporter CSV') {
                 csvExport();
-              } else if (v == 'CSV') {
-                csvImport();
               } else {
                 fileAction(v);
               }
@@ -3623,7 +4087,6 @@ class _HomeState extends State<Home> {
               'Importer projet',
               'Export PDF',
               'Exporter CSV',
-              'CSV',
             ].map((v) => PopupMenuItem(value: v, child: Text(v))).toList(),
             child: const Padding(
               padding: EdgeInsets.all(16),
@@ -3873,50 +4336,366 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> arrangeWithOptions() async {
-    var corner = p!['arrangementCorner'] ?? arrangementCorners.first;
-    final accepted = await showDialog<bool>(
-      context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (c, update) => AlertDialog(
-          title: const Text('Disposition automatique'),
-          content: SizedBox(
-            width: 360,
-            child: DropdownButtonFormField<String>(
-              isExpanded: true,
-              initialValue: corner,
-              decoration: const InputDecoration(labelText: 'Point de départ'),
-              items: arrangementCorners
-                  .map(
-                    (value) =>
-                        DropdownMenuItem(value: value, child: Text(value)),
-                  )
-                  .toList(),
-              onChanged: (value) => update(() => corner = value),
+    if (arranging || arrangementDialogOpen || p == null) return;
+    arrangementDialogOpen = true;
+    try {
+      var corner = p!['arrangementCorner'] ?? arrangementCorners.first;
+      final available = parcoursAvailable(p!);
+      var mode = available && p!['arrangementMode'] == 'Parcours'
+          ? 'Parcours'
+          : 'Standard';
+      final settings = p!['parcoursSettings'] as Map? ?? {};
+      var orientation = settings['orientation'] ?? parcoursOrientations.first;
+      var closure = settings['closure'] ?? parcoursClosures.first;
+      var circulation = settings['circulation'] ?? 'Fermé';
+      var wallLayout = settings['wallLayout'] ?? parcoursWallLayouts.first;
+      var wall = p!['wallSupport'] ?? 'Aucun';
+      var snapshot = clone(p!);
+      final selectedZones = rows(p!, 'items')
+          .where(
+            (i) => i['kind'] == 'zone' && i['parcoursAccess'] == 'À desservir',
+          )
+          .map((i) => i['id'] as String)
+          .toSet();
+      final gap = TextEditingController(text: eventExhibitorGap(p!).toString());
+      String? error;
+      final route = DialogRoute<bool>(
+        context: context,
+        builder: (c) => StatefulBuilder(
+          builder: (c, update) => AlertDialog(
+            title: const Text('Disposition automatique'),
+            content: SizedBox(
+              width: 460,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (available)
+                      DropdownButtonFormField<String>(
+                        initialValue: mode,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Mode de disposition',
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'Standard',
+                            child: Text('Standard'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'Parcours',
+                            child: Text('Parcours des exposants en S'),
+                          ),
+                        ],
+                        onChanged: (value) => update(() => mode = value!),
+                      ),
+                    if (mode == 'Standard')
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        initialValue: corner,
+                        decoration: const InputDecoration(
+                          labelText: 'Point de départ',
+                        ),
+                        items: arrangementCorners
+                            .map(
+                              (value) => DropdownMenuItem(
+                                value: value,
+                                child: Text(value),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) => update(() => corner = value),
+                      ),
+                    if (mode == 'Parcours') ...[
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: circulation,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Type de parcours',
+                        ),
+                        items: parcoursCirculations
+                            .map(
+                              (v) => DropdownMenuItem(
+                                value: v,
+                                child: Text('Parcours ${v.toLowerCase()}'),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) => update(() => circulation = v!),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        circulation == 'Fermé'
+                            ? 'Chemin imposé : tous les exposants doivent être visités, sans raccourci. Si les tables et les appuis ne permettent pas de fermer le passage, le calcul le signale.'
+                            : 'Circulation libre : disposition optimisée, avec des raccourcis possibles entre les allées.',
+                      ),
+                      const SizedBox(height: 12),
+                      const Text('Plan actuel — choisir les zones à desservir'),
+                      const SizedBox(height: 8),
+                      ParcoursSnapshot(
+                        project: snapshot,
+                        selected: selectedZones,
+                        onToggle: (id) => update(() {
+                          if (!selectedZones.add(id)) selectedZones.remove(id);
+                        }),
+                      ),
+                      const SizedBox(height: 8),
+                      ...rows(snapshot, 'items')
+                          .where((i) => i['kind'] == 'zone')
+                          .map(
+                            (zone) => CheckboxListTile(
+                              key: ValueKey('parcours-zone-${zone['id']}'),
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(
+                                (zone['label'] ?? '').toString().trim().isEmpty
+                                    ? 'Zone sans libellé'
+                                    : zone['label'],
+                              ),
+                              subtitle: Text(
+                                zone['zoneFill'] == 'Invisible'
+                                    ? 'Zone invisible dans le plan'
+                                    : 'Passage le long d’un bord accessible',
+                              ),
+                              value: selectedZones.contains(zone['id']),
+                              onChanged: (v) => update(() {
+                                if (v == true) {
+                                  selectedZones.add(zone['id']);
+                                } else {
+                                  selectedZones.remove(zone['id']);
+                                }
+                              }),
+                            ),
+                          ),
+                      const Text(
+                        'Les zones cochées sont desservies par leur bord, sans table contre elles. Les autres restent hors des étapes du parcours. Les allées traversables se règlent dans les propriétés de la zone.',
+                      ),
+                      ...rows(snapshot, 'items')
+                          .where(
+                            (zone) =>
+                                zone['kind'] == 'zone' &&
+                                zone['zoneFill'] == 'Invisible',
+                          )
+                          .map(
+                            (zone) => SwitchListTile(
+                              key: ValueKey('parcours-passage-${zone['id']}'),
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(
+                                'Allée traversable : ${(zone['label'] ?? '').toString().trim().isEmpty ? 'zone sans libellé' : zone['label']}',
+                              ),
+                              subtitle: const Text(
+                                'Tables interdites, visiteurs autorisés',
+                              ),
+                              value: zone['parcoursPassage'] == 'Oui',
+                              onChanged: (value) => update(
+                                () => zone['parcoursPassage'] = value
+                                    ? 'Oui'
+                                    : 'Non',
+                              ),
+                            ),
+                          ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: orientation,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Orientation des rangées',
+                        ),
+                        items: parcoursOrientations
+                            .map(
+                              (v) => DropdownMenuItem(value: v, child: Text(v)),
+                            )
+                            .toList(),
+                        onChanged: (v) => update(() => orientation = v!),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        key: const ValueKey('parcours-gap'),
+                        controller: gap,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: 'Espace entre exposants dos à dos (m)',
+                          helperText: circulation == 'Ouvert'
+                              ? 'Une rangée simple réserve la moitié de cet espace, avec la place nécessaire pour s’asseoir.'
+                              : null,
+                          helperMaxLines: 3,
+                          errorText: error,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: closure,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Tables de fermeture',
+                        ),
+                        items: parcoursClosures
+                            .map(
+                              (v) => DropdownMenuItem(value: v, child: Text(v)),
+                            )
+                            .toList(),
+                        onChanged: (v) => update(() => closure = v!),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: wall,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Appui au mur autorisé',
+                        ),
+                        items: wallModes
+                            .map(
+                              (v) => DropdownMenuItem(value: v, child: Text(v)),
+                            )
+                            .toList(),
+                        onChanged: (v) => update(() => wall = v!),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: wallLayout,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Appui des rangées',
+                        ),
+                        items: parcoursWallLayouts
+                            .map(
+                              (v) => DropdownMenuItem(value: v, child: Text(v)),
+                            )
+                            .toList(),
+                        onChanged: (v) => update(() => wallLayout = v!),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Avec une seule entrée, les rangées alternées et une rangée de liaison imposent une boucle sans demi-tour. Un appui au mur autorisé ferme les raccourcis ; les assises et le passage de retour gardent leur espace.',
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Tables rectangulaires ou carrées, pivotées sans redimensionnement. Les exposants se placent dans les îlots fermés. Le passage visiteurs reste celui du plan. Les positions fixées et les tables de service sont conservées.',
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Entre les rangées : la longueur de la table de bout doit correspondre à l’espace choisi pour fermer sans trou. À l’extérieur : elle doit couvrir cet espace. Une fermeture est omise si le mur ferme déjà le bout.',
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(c, false),
+                child: const Text('Annuler'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final value = number(gap.text, -1);
+                  if (mode == 'Parcours' &&
+                      (!value.isFinite || value < .6 || value > 10)) {
+                    update(() => error = 'Saisir une largeur de 0,60 à 10 m.');
+                    return;
+                  }
+                  Navigator.pop(c, true);
+                },
+                child: const Text('Disposer'),
+              ),
+            ],
+          ),
+        ),
+      );
+      final accepted = await Navigator.of(context).push(route);
+      await route.completed;
+      final exhibitorGap = number(gap.text, 1.2);
+      gap.dispose();
+      if (accepted != true || !mounted) return;
+      final draft = clone(p!);
+      draft['arrangementCorner'] = corner;
+      draft['arrangementMode'] = mode;
+      if (draft['comfort'] is Map) {
+        draft['comfort']['exhibitorGap'] = exhibitorGap;
+      }
+      if (mode == 'Parcours') {
+        for (final zone in rows(
+          draft,
+          'items',
+        ).where((i) => i['kind'] == 'zone')) {
+          zone['parcoursAccess'] = selectedZones.contains(zone['id'])
+              ? 'À desservir'
+              : 'À exclure';
+          final draft = rows(
+            snapshot,
+            'items',
+          ).firstWhere((i) => i['id'] == zone['id']);
+          zone['parcoursPassage'] =
+              draft['parcoursPassage'] ?? zone['parcoursPassage'] ?? 'Non';
+        }
+        draft['wallSupport'] = wall;
+        draft['parcoursSettings'] = {
+          'orientation': orientation,
+          'closure': closure,
+          'exhibitorGap': exhibitorGap,
+          'wallLayout': wallLayout,
+          'circulation': circulation,
+          'imposedLoop': circulation == 'Fermé',
+        };
+      }
+      setState(() => arranging = true);
+      final progress = DialogRoute<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const PopScope(
+          canPop: false,
+          child: AlertDialog(
+            content: Row(
+              children: [
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(),
+                ),
+                SizedBox(width: 16),
+                Expanded(child: Text('Disposition en cours…')),
+              ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(c, false),
-              child: const Text('Annuler'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(c, true),
-              child: const Text('Disposer'),
-            ),
-          ],
         ),
-      ),
-    );
-    if (accepted != true || !mounted) return;
-    change(() {
-      p!['arrangementCorner'] = corner;
-      final failed = arrange(p!);
-      toast(
-        failed == 0
-            ? 'Disposition proposée. Examiner les contrôles.'
-            : 'Pas assez de place : $failed tables placées hors salle, en rouge. Réduire le nombre de tables ou revoir la salle et les passages.',
       );
-    });
+      unawaited(Navigator.of(context).push(progress));
+      try {
+        final result = await (widget.arrangementRunner ?? arrangeInBackground)(
+          draft,
+        );
+        if (!mounted) return;
+        change(() {
+          p!.clear();
+          p!.addAll(result);
+        });
+        final failed = tables(p!).where((t) => unplacedTable(p!, t)).length;
+        toast(
+          failed == 0
+              ? (parcoursWarnings(p!).isEmpty
+                    ? 'Disposition proposée. Examiner les contrôles.'
+                    : 'Parcours proposé avec des points à vérifier dans Contrôles.')
+              : mode == 'Parcours'
+              ? '$failed tables non intégrées au parcours, placées hors salle en rouge. Vérifier les fermetures, les dimensions et les passages dans Contrôles.'
+              : 'Pas assez de place : $failed tables placées hors salle, en rouge. Réduire le nombre de tables ou revoir la salle et les passages.',
+        );
+      } catch (error) {
+        if (mounted) {
+          toast(
+            'Disposition impossible : $error. Le plan précédent est conservé.',
+          );
+        }
+      } finally {
+        if (progress.isActive) progress.navigator?.removeRoute(progress);
+        if (mounted) setState(() => arranging = false);
+      }
+    } finally {
+      arrangementDialogOpen = false;
+    }
   }
 
   void movePlanDrag(Offset delta) {
@@ -4326,6 +5105,11 @@ class _HomeState extends State<Home> {
           '${room['width']} × ${room['height']} m • glisser un objet ; glisser le fond pour déplacer la vue',
           [
             TextButton(onPressed: roomEdit, child: const Text('Salle')),
+            TextButton(
+              key: const ValueKey('event-comfort'),
+              onPressed: () => comfortEdit(p!),
+              child: const Text('Confort'),
+            ),
             TextButton.icon(
               onPressed: roomClear,
               icon: const Icon(Icons.clear_all),
@@ -4336,8 +5120,21 @@ class _HomeState extends State<Home> {
               child: const Text('Réservations →'),
             ),
             FilledButton.tonal(
-              onPressed: arrangeWithOptions,
-              child: const Text('Disposer tables'),
+              onPressed: arranging ? null : arrangeWithOptions,
+              child: arranging
+                  ? const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 8),
+                        Text('Disposition en cours…'),
+                      ],
+                    )
+                  : const Text('Disposer tables'),
             ),
           ],
         ),
@@ -4406,6 +5203,19 @@ class _HomeState extends State<Home> {
                                               ),
                                             ),
                                           ),
+                                          if (p!['showParcours'] != false &&
+                                              parcoursCurrent(p!))
+                                            Positioned.fill(
+                                              child: IgnorePointer(
+                                                child: CustomPaint(
+                                                  painter: ParcoursPainter(
+                                                    p!,
+                                                    scale,
+                                                    dark: widget.darkMode,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
                                           if (pending.isNotEmpty)
                                             Positioned(
                                               left:
@@ -4607,7 +5417,10 @@ class _HomeState extends State<Home> {
                                                                       transform,
                                                                   builder: (_, matrix, child) => CustomPaint(
                                                                     painter: PlaceLabelsPainter(
-                                                                      i,
+                                                                      geometry
+                                                                          .view(
+                                                                            i,
+                                                                          ),
                                                                       tablePlaceLabels(
                                                                         p!,
                                                                         i,
@@ -4628,13 +5441,16 @@ class _HomeState extends State<Home> {
                                                               adaptedPlaces(i)
                                                                   .isNotEmpty)
                                                             ...adaptedPlaces(
-                                                              i,
+                                                              geometry.view(i),
                                                             ).where((a) => a['slot'] < geometry.capacity(i)).map((
                                                               a,
                                                             ) {
                                                               final points =
                                                                   placeLabelPositions(
-                                                                    i,
+                                                                    geometry
+                                                                        .view(
+                                                                          i,
+                                                                        ),
                                                                     geometry
                                                                         .capacity(
                                                                           i,
@@ -4896,6 +5712,26 @@ class _HomeState extends State<Home> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                      if (parcoursActive(p!)) ...[
+                        CheckboxListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Afficher le parcours proposé'),
+                          value: p!['showParcours'] != false,
+                          onChanged: (v) =>
+                              change(() => p!['showParcours'] = v!),
+                        ),
+                        const Text(
+                          'Trait bleu : passage visiteurs. Les espaces entre les rangées sont réservés aux exposants.',
+                        ),
+                        if (parcoursWarnings(p!).isNotEmpty)
+                          Text(
+                            parcoursWarnings(p!).join('\n'),
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                        const SizedBox(height: 8),
+                      ],
                       ...[
                         (const Color(0xffd7ddda), 'Vide'),
                         (const Color(0xffffd9ad), 'Partiellement occupée'),
@@ -5412,26 +6248,7 @@ class _HomeState extends State<Home> {
       heading(
         'Contrôles de préparation',
         'Aide à la décision ; vérifier les conditions réelles et obligations applicables.',
-        [
-          TextButton(
-            onPressed: () async {
-              final v = await ask(
-                'Passage de travail',
-                '${p!['aisle']}',
-                label: 'Écart entre les bords des tables (m)',
-              );
-              if (v != null) {
-                final n = number(v, -1);
-                if (n >= .5 && n <= 3) {
-                  change(() => p!['aisle'] = n);
-                } else {
-                  toast('Valeur entre 0,5 et 3 m attendue.');
-                }
-              }
-            },
-            child: Text('Passage ${p!['aisle']} m'),
-          ),
-        ],
+        [],
       ),
       Expanded(
         child: ListView(
@@ -5441,7 +6258,7 @@ class _HomeState extends State<Home> {
               child: Padding(
                 padding: EdgeInsets.all(18),
                 child: Text(
-                  'La valeur 90 cm est un repère de travail configurable. Les collisions sont conservatrices (boîtes englobantes). Les portes sont traitées comme zones réservées rectangulaires : saisir toute la surface du débattement. Le sens est annoté, sans calcul de l’arc.\nAccessibilité : aucun calcul de trajet continu dans cette version. Vérifier l’entrée, toute l’allée jusqu’à la place, le bout de table, l’espace fauteuil et l’accompagnant. Les besoins restent signalés.',
+                  'Les repères de passage et de confort se règlent dans les préférences de l’événement. Les collisions sont conservatrices (boîtes englobantes). Les portes sont traitées comme zones réservées rectangulaires : saisir toute la surface du débattement. Le sens est annoté, sans calcul de l’arc.\nAccessibilité : aucun calcul de trajet continu dans cette version. Vérifier l’entrée, toute l’allée jusqu’à la place, le bout de table, l’espace fauteuil et l’accompagnant. Les besoins restent signalés.',
                 ),
               ),
             ),
@@ -5522,6 +6339,10 @@ class _HomeState extends State<Home> {
                   }),
                   trailing: Wrap(
                     children: [
+                      TextButton(
+                        onPressed: () => comfortEdit(v),
+                        child: const Text('Confort'),
+                      ),
                       TextButton(
                         onPressed: () => eventProperties(v),
                         child: const Text('Propriétés'),

@@ -5,7 +5,7 @@ import 'package:tableo/main.dart';
 
 import 'arrangement_start_test.dart' show room, table;
 import 'attributions_test.dart' show desktop;
-import 'ui_test.dart' show MemoryStore;
+import 'ui_test.dart' show MemoryStore, immediateArrangement;
 
 void main() {
   testWidgets(
@@ -17,7 +17,12 @@ void main() {
       p['room']['height'] = 3.0;
       p['items'] = [for (var i = 0; i < 6; i++) table('T$i')];
       final before = clone(p)['items'];
-      await tester.pumpWidget(Tableo(store: MemoryStore([p])));
+      await tester.pumpWidget(
+        Tableo(
+          store: MemoryStore([p]),
+          arrangementRunner: immediateArrangement,
+        ),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Disposer tables'));
       await tester.pumpAndSettle();

@@ -71,9 +71,19 @@ MagneticSnap magneticSnap(Json p, Set<String> ids, {double threshold = .14}) {
           bw = number(b['w']),
           bh = number(b['h']);
       final pair = a['kind'] == 'table' && b['kind'] == 'table';
-      final gaps = pair ? [0.0, number(p['aisle'])] : [0.0];
-      for (final gap in gaps) {
+      for (final junction in pair ? [true, false] : [true]) {
         for (final side in ['left', 'right', 'top', 'bottom']) {
+          final opposite = {
+            'left': 'right',
+            'right': 'left',
+            'top': 'bottom',
+            'bottom': 'top',
+          }[side]!;
+          final gap = pair
+              ? (junction
+                    ? tableJoinDistance(p, b, side, a, opposite)
+                    : eventTableGap(p))
+              : 0.0;
           final horizontal = side == 'left' || side == 'right';
           final normal = switch (side) {
             'left' => bx - aw - gap - ax,
@@ -85,7 +95,7 @@ MagneticSnap magneticSnap(Json p, Set<String> ids, {double threshold = .14}) {
           final aligned = horizontal
               ? by + (bh - ah) / 2 - ay
               : bx + (bw - aw) / 2 - ax;
-          final tangents = pair && gap == 0
+          final tangents = pair && junction
               ? [aligned]
               : [
                   0.0,
@@ -98,7 +108,7 @@ MagneticSnap magneticSnap(Json p, Set<String> ids, {double threshold = .14}) {
                 dy = horizontal ? tangent : normal;
             if (sqrt(dx * dx + dy * dy) > threshold + .000001) continue;
             final candidate = {...a, 'x': ax + dx, 'y': ay + dy};
-            if (pair && gap == 0 && joinedEdges(p, candidate, b) == null) {
+            if (pair && junction && joinedEdges(p, candidate, b) == null) {
               continue;
             }
             final overlap = horizontal
@@ -123,9 +133,9 @@ MagneticSnap magneticSnap(Json p, Set<String> ids, {double threshold = .14}) {
             propose(
               dx,
               dy,
-              gap == 0 ? 'Accroche : $title' : 'Passage : $title',
+              junction ? 'Accroche : $title' : 'Passage : $title',
               [line],
-              priority: pair && gap == 0
+              priority: pair && junction
                   ? 0
                   : tangent == aligned && tangent != 0
                   ? 1
@@ -153,7 +163,17 @@ MagneticSnap magneticSnap(Json p, Set<String> ids, {double threshold = .14}) {
       _ =>
         number(e['y']) + number(e['h']) - number(item['y']) - number(item['h']),
     };
-    return max(number(p['aisle']) / 2, seat);
+    return p['comfort'] == null
+        ? max(eventTableGap(p) / 2, seat)
+        : max(
+            eventWallGap(p),
+            seat == 0
+                ? 0
+                : seat +
+                      (p['arrangementMode'] == 'Parcours'
+                          ? 0
+                          : eventCirculation(p)),
+          );
   }
 
   final polygon = roomPolygon(room);

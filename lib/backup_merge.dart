@@ -187,6 +187,9 @@ class BackupMergePlan {
           .where((item) => !['table', 'bench', 'banc'].contains(item['kind']))
           .map(clone)
           .toList();
+      for (final item in rows(result, 'items')) {
+        itemIds[reference(-1, item['id'])] = item['id'];
+      }
       final labels = rows(
         result,
         'items',
@@ -266,6 +269,11 @@ class BackupMergePlan {
       }
       copy['separate'] =
           groupIds[reference(entry.source, copy['separate'])] ?? '';
+      copy['placeProximity'] = {
+        for (final pref in (copy['placeProximity'] as Map? ?? {}).entries)
+          if (itemIds.containsKey(reference(entry.source, pref.key)))
+            itemIds[reference(entry.source, pref.key)]: pref.value,
+      };
       copy['proximity'] = {
         for (final e in (copy['proximity'] as Map? ?? {}).entries)
           if (groupIds.containsKey(reference(entry.source, e.key)))

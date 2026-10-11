@@ -5,6 +5,7 @@ import json
 import re
 import shutil
 import zipfile
+import argparse
 
 RUNTIME_FILES = {
     'tableo.exe', 'flutter_windows.dll', 'sqlite3.dll', 'data/app.so', 'data/icudtl.dat',
@@ -31,13 +32,30 @@ def audit_runtime(source):
         raise ValueError(f'Livraison refusée : fichiers inattendus {sorted(unexpected)}, manquants {sorted(missing)}')
     return files
 
-def package(root):
+def package(root, local=False):
     version = re.search(r'^version:\s*([\d.]+)', (root / 'pubspec.yaml').read_text(), re.M)[1]
     assert f"const appVersion = '{version}';" in (root / 'lib/app_version.dart').read_text()
     source = root / 'build/windows/x64/runner/Release'
     files = audit_runtime(source)
-    target = root / 'dist' / f'Tableo-{version}'
+    target = root / 'dist' / ('Tableo-test' if local else f'Tableo-{version}')
     archive = root / 'dist' / f'Tableo-Windows-{version}.zip'
+    public_files = ['README.md', 'CHANGELOG.md', 'DONNEES-ET-MISES-A-JOUR.md', 'examples/modele-reservations.csv']
+    expected = files | set(public_files)
+    if local:
+        if target.resolve().parent != (root/'dist').resolve() or target.is_symlink():
+            raise ValueError('Dossier de test incorrect.')
+        if target.exists():
+            found = {p.relative_to(target).as_posix() for p in target.rglob('*') if p.is_file()}
+            if found - expected - {'LOCAL-TEST.txt'} or any(p.is_symlink() for p in target.rglob('*')):
+                raise ValueError('Dossier de test contenant des fichiers inconnus : remplacement refusé.')
+        target.mkdir(parents=True, exist_ok=True)
+        for name in sorted(expected):
+            dest=target/name
+            dest.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copy2(source/name if name in files else root/name,dest)
+        (target/'LOCAL-TEST.txt').write_text(f'Test local de Tableo {version}. Non publié. Les prochains essais remplacent uniquement les fichiers de ce dossier.\n',encoding='utf-8')
+        print(target)
+        return
     if target.exists() or archive.exists():
         raise FileExistsError('Livraison déjà présente : aucun fichier existant ne sera remplacé.')
     target.mkdir(parents=True)
@@ -45,7 +63,6 @@ def package(root):
         dest = target / name
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source / name, dest)
-    public_files = ['README.md', 'CHANGELOG.md', 'DONNEES-ET-MISES-A-JOUR.md', 'examples/modele-reservations.csv']
     for name in public_files:
         dest = target / name
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -61,4 +78,6 @@ def package(root):
     print(archive)
 
 if __name__ == '__main__':
-    package(Path(__file__).resolve().parents[1])
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--local',action='store_true',help='Actualiser le seul dossier de test, sans créer une nouvelle version ni archive.')
+    package(Path(__file__).resolve().parents[1],local=parser.parse_args().local)
