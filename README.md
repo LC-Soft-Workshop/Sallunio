@@ -1,6 +1,6 @@
 # Tableo
 
-**Tableo 1.1.0** est une application Windows en français pour préparer les événements : plans de salle, mobilier, réservations, attribution des places, accueil et service.
+**Tableo 1.1.1** est une application Windows en français pour préparer les événements : plans de salle, mobilier, réservations, attribution des places, accueil et service.
 
 L’application fonctionne **localement, sans compte**. Vos événements restent sur votre ordinateur. Android, la sauvegarde en ligne, le travail collaboratif et les rôles sont envisagés pour une future version 2 et ne sont pas inclus dans cette version.
 
@@ -11,6 +11,7 @@ L’application fonctionne **localement, sans compte**. Vos événements restent
 Ce lien permanent télécharge la dernière version publiée. Le paquet est destiné à Windows 64 bits.
 
 - [Nouveautés de la dernière version](https://github.com/freakbn777/Tableo/releases/latest)
+- [Guide utilisateur en français — Wiki](https://github.com/freakbn777/Tableo/wiki)
 - [Historique complet en français](CHANGELOG.md)
 - [Signaler un problème ou proposer une amélioration](https://github.com/freakbn777/Tableo/issues)
 

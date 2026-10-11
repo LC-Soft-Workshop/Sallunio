@@ -116,4 +116,21 @@ void main() {
     expect(applyTableJoinGapLocally(p, before, 'b'), contains('appliquée'));
     expect(number(tables(p)[2]['x']), closeTo(5.7, 1e-8));
   });
+  test('Opening a row leaves a perpendicular branch in place', () {
+    final p = row()..['joining'] = 'Les deux';
+    for (final t in tables(p)) {
+      t['parcoursBlock'] = 'block';
+    }
+    rows(p, 'items').add(
+      table('branch', 7.4, 2.8, w: .8, h: 1.8)..['parcoursBlock'] = 'block',
+    );
+    final before = clone(p);
+    tables(p)[1].addAll({'joinGap': .2, 'joinGapSides': 'Second bord'});
+    expect(applyTableJoinGapLocally(p, before, 'b'), contains('appliquée'));
+    final branch = tables(p).firstWhere((t) => t['id'] == 'branch');
+    expect(branch['x'], 7.4);
+    expect(branch['y'], 2.8);
+    expect(number(tables(p)[2]['x']), closeTo(5.8, 1e-8));
+    expect(number(tables(p)[3]['x']), closeTo(7.6, 1e-8));
+  });
 }

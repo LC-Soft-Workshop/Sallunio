@@ -7,10 +7,12 @@ import 'parcours.dart';
 
 class ParcoursPainter extends CustomPainter {
   ParcoursPainter(this.project, this.scale, {required this.dark})
-    : paths = parcoursPaths(project);
+    : paths = parcoursPaths(project, allowStale: true),
+      stale = !parcoursCurrent(project);
   final Json project;
   final double scale;
   final bool dark;
+  final bool stale;
   final List<List<Point<double>>> paths;
   @override
   void paint(Canvas canvas, Size size) {
@@ -24,7 +26,18 @@ class ParcoursPainter extends CustomPainter {
       for (final point in route.skip(1)) {
         path.lineTo(point.x * scale, point.y * scale);
       }
-      canvas.drawPath(path, paint);
+      if (stale) {
+        for (final metric in path.computeMetrics()) {
+          for (double offset = 0; offset < metric.length; offset += 12) {
+            canvas.drawPath(
+              metric.extractPath(offset, min(offset + 7, metric.length)),
+              paint,
+            );
+          }
+        }
+      } else {
+        canvas.drawPath(path, paint);
+      }
     }
     if (!parcoursCurrent(project)) return;
     for (final arrow in parcoursArrows(project)) {

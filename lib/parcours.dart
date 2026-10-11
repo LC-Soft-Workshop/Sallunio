@@ -172,7 +172,10 @@ List<String> parcoursWarnings(Json p) {
   return warnings;
 }
 
-List<List<Point<double>>> parcoursPaths(Json p) => !parcoursCurrent(p)
+List<List<Point<double>>> parcoursPaths(Json p, {bool allowStale = false}) =>
+    !(allowStale
+        ? parcoursActive(p) && validParcoursPlan(p['parcoursPlan'])
+        : parcoursCurrent(p))
     ? []
     : [
         for (final path in p['parcoursPlan']['paths'] as List)
@@ -548,6 +551,20 @@ _Layout _build(
     for (final access in singleEntrance) {
       if (number(access['x']) <= aisle) {
         spineX = max(spineX, number(access['x']) + number(access['w']) + aisle);
+      }
+    }
+    // The outer return must also pass perimeter zones and obstacles. Keeping
+    // only the entrance clear can leave a narrow choke point behind the spine.
+    for (final obstacle in obstacles) {
+      if (parcoursZoneTraversable(obstacle) ||
+          obstacle['parcoursBuffer'] == true) {
+        continue;
+      }
+      if (number(obstacle['x']) <= aisle) {
+        spineX = max(
+          spineX,
+          number(obstacle['x']) + number(obstacle['w']) + aisle,
+        );
       }
     }
   }

@@ -4357,8 +4357,7 @@ class _HomeState extends State<Home> {
           )
           .map((i) => i['id'] as String)
           .toSet();
-      final gap = TextEditingController(text: eventExhibitorGap(p!).toString());
-      String? error;
+      final exhibitorGap = eventExhibitorGap(p!);
       final route = DialogRoute<bool>(
         context: context,
         builder: (c) => StatefulBuilder(
@@ -4511,20 +4510,9 @@ class _HomeState extends State<Home> {
                         onChanged: (v) => update(() => orientation = v!),
                       ),
                       const SizedBox(height: 12),
-                      TextField(
-                        key: const ValueKey('parcours-gap'),
-                        controller: gap,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        decoration: InputDecoration(
-                          labelText: 'Espace entre exposants dos à dos (m)',
-                          helperText: circulation == 'Ouvert'
-                              ? 'Une rangée simple réserve la moitié de cet espace, avec la place nécessaire pour s’asseoir.'
-                              : null,
-                          helperMaxLines: 3,
-                          errorText: error,
-                        ),
+                      Text(
+                        key: const ValueKey('parcours-gap-info'),
+                        'Espace exposants dos à dos : ${exhibitorGap.toStringAsFixed(2).replaceAll('.', ',')} m — réglé dans Confort de l’événement.',
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
@@ -4592,12 +4580,6 @@ class _HomeState extends State<Home> {
               ),
               FilledButton(
                 onPressed: () {
-                  final value = number(gap.text, -1);
-                  if (mode == 'Parcours' &&
-                      (!value.isFinite || value < .6 || value > 10)) {
-                    update(() => error = 'Saisir une largeur de 0,60 à 10 m.');
-                    return;
-                  }
                   Navigator.pop(c, true);
                 },
                 child: const Text('Disposer'),
@@ -4608,15 +4590,10 @@ class _HomeState extends State<Home> {
       );
       final accepted = await Navigator.of(context).push(route);
       await route.completed;
-      final exhibitorGap = number(gap.text, 1.2);
-      gap.dispose();
       if (accepted != true || !mounted) return;
       final draft = clone(p!);
       draft['arrangementCorner'] = corner;
       draft['arrangementMode'] = mode;
-      if (draft['comfort'] is Map) {
-        draft['comfort']['exhibitorGap'] = exhibitorGap;
-      }
       if (mode == 'Parcours') {
         for (final zone in rows(
           draft,
@@ -5204,7 +5181,10 @@ class _HomeState extends State<Home> {
                                             ),
                                           ),
                                           if (p!['showParcours'] != false &&
-                                              parcoursCurrent(p!))
+                                              parcoursPaths(
+                                                p!,
+                                                allowStale: true,
+                                              ).isNotEmpty)
                                             Positioned.fill(
                                               child: IgnorePointer(
                                                 child: CustomPaint(
@@ -5716,6 +5696,17 @@ class _HomeState extends State<Home> {
                         CheckboxListTile(
                           contentPadding: EdgeInsets.zero,
                           title: const Text('Afficher le parcours proposé'),
+                          subtitle:
+                              !parcoursCurrent(p!) &&
+                                  parcoursPaths(p!, allowStale: true).isNotEmpty
+                              ? const Text(
+                                  'Dernier tracé en pointillés : plan modifié, à recalculer.',
+                                )
+                              : parcoursPaths(p!, allowStale: true).isEmpty
+                              ? const Text(
+                                  'Aucun tracé disponible. Relancer la disposition et vérifier les messages.',
+                                )
+                              : null,
                           value: p!['showParcours'] != false,
                           onChanged: (v) =>
                               change(() => p!['showParcours'] = v!),

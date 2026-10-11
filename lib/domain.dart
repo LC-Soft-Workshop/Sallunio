@@ -673,7 +673,7 @@ double tableJoinDistance(Json p, Json a, String ae, Json b, String be) =>
     max(tableJoinEdgeGap(p, a, ae), tableJoinEdgeGap(p, b, be));
 
 /// Applies a table's junction settings to its existing neighbours locally.
-/// The chosen table stays anchored; connected pieces on each side move rigidly.
+/// The chosen table stays anchored; only its collinear neighbours move.
 /// A blocked proposal leaves every existing position intact.
 String? applyTableJoinGapLocally(Json p, Json before, String id) {
   final current = tables(p).firstWhere((t) => t['id'] == id);
@@ -767,6 +767,10 @@ String? applyTableJoinGapLocally(Json p, Json before, String id) {
     while (pending.isNotEmpty) {
       final node = pending.removeLast();
       for (final l in links.where((l) => l.$1 == node || l.$2 == node)) {
+        final sameAxis = horizontal
+            ? ['left', 'right'].contains(l.$3)
+            : ['top', 'bottom'].contains(l.$3);
+        if (!sameAxis) continue;
         final next = l.$1 == node ? l.$2 : l.$1;
         if (next != id && onSide(next) && side.add(next)) pending.add(next);
       }

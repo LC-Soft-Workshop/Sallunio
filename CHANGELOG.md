@@ -3,6 +3,13 @@
 Historique en français, établi à partir des validations conservées du projet.
 Les anciennes versions ne constituent pas des livraisons GitHub rétroactives.
 
+## 1.1.1
+
+- Correction du parcours fermé lorsqu’une zone près du mur rétrécit le passage de retour : la rangée de liaison réserve désormais toute la largeur nécessaire devant les zones et obstacles périphériques.
+- L’espace exposants dos à dos se règle uniquement dans le confort de l’événement ; la disposition affiche la valeur à titre d’information sans la modifier.
+- La case d’affichage du parcours peut réafficher le dernier tracé après une modification du plan. Un tracé obsolète apparaît en pointillés, avec une invitation à recalculer ; il n’est pas utilisé comme parcours validé.
+- L’ouverture locale d’une jonction suit uniquement la rangée concernée et ne déplace plus les branches perpendiculaires reliées à son îlot.
+
 ## 1.1.0
 
 Évolutions depuis la dernière version publiée, **1.0.43**. Cette version reste une application Windows locale, sans compte ni envoi des événements sur Internet.

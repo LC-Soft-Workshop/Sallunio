@@ -159,6 +159,30 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets('Arrangement reads exhibitor spacing from event comfort only', (
+    tester,
+  ) async {
+    desktop(tester);
+    await fonts(tester);
+    final p = market()..['comfort'] = {'exhibitorGap': 1.75};
+    final before = clone(p);
+    await tester.pumpWidget(Tableo(store: MemoryStore([p])));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Disposer tables'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('parcours-gap')), findsNothing);
+    expect(
+      find.text(
+        'Espace exposants dos à dos : 1,75 m — réglé dans Confort de l’événement.',
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Annuler'));
+    await tester.pumpAndSettle();
+    expect(p['comfort'], before['comfort']);
+    expect(p['parcoursSettings'], before['parcoursSettings']);
+  });
+
   testWidgets('Settings, validation, arrangement, and undo operate locally', (
     tester,
   ) async {
@@ -187,15 +211,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Parcours ouvert').last);
     await tester.pumpAndSettle();
-    final field = find.byKey(const ValueKey('parcours-gap'));
-    await tester.enterText(field, '0');
-    await tester.tap(find.text('Disposer'));
-    await tester.pumpAndSettle();
-    expect(find.text('Saisir une largeur de 0,60 à 10 m.'), findsOneWidget);
-    await tester.enterText(field, '1,2');
+    expect(find.byKey(const ValueKey('parcours-gap')), findsNothing);
+    expect(find.byKey(const ValueKey('parcours-gap-info')), findsOneWidget);
     await tester.tap(find.text('Disposer'));
     await tester.pumpAndSettle();
     expect(parcoursCurrent(p), true);
+    expect(p['comfort'], before['comfort']);
     expect(parcoursWarnings(p), isEmpty);
     expect(p['parcoursSettings']['exhibitorGap'], 1.2);
     expect(p['parcoursSettings']['circulation'], 'Ouvert');
@@ -251,6 +272,22 @@ void main() {
       await tester.pumpAndSettle();
       expect(p['showParcours'], false);
       expect(planSvg(p), isNot(contains('<polyline')));
+      tables(p).first['joinGap'] = .15;
+      expect(parcoursCurrent(p), false);
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      final painters = tester
+          .widgetList<CustomPaint>(find.byType(CustomPaint))
+          .map((v) => v.painter)
+          .whereType<ParcoursPainter>();
+      expect(p['showParcours'], true);
+      expect(painters.single.paths, isNotEmpty);
+      expect(painters.single.stale, true);
+      expect(parcoursPaths(p), isEmpty);
+      expect(
+        find.text('Dernier tracé en pointillés : plan modifié, à recalculer.'),
+        findsOneWidget,
+      );
     },
   );
 }
