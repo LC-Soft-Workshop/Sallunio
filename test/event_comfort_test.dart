@@ -186,7 +186,10 @@ void main() {
       });
       await tester.pumpWidget(Tableo(store: store));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('event-comfort')));
+      await tester.ensureVisible(find.byKey(const ValueKey('plan-tool-settings')));
+      await tester.tap(find.byKey(const ValueKey('plan-tool-settings')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confort').last);
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('comfort-recommended')));
       await tester.pumpAndSettle();
@@ -197,7 +200,10 @@ void main() {
       expect(store.saved['comfort']['seatWidth'], .6);
       expect(store.saved['items'], positions['items']);
       expect(store.saved['groups'], positions['groups']);
-      await tester.tap(find.byKey(const ValueKey('event-comfort')));
+      await tester.ensureVisible(find.byKey(const ValueKey('plan-tool-settings')));
+      await tester.tap(find.byKey(const ValueKey('plan-tool-settings')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confort').last);
       await tester.pumpAndSettle();
       await tester.ensureVisible(field);
       await tester.enterText(field, '0,80');

@@ -1,6 +1,6 @@
 # Tableo
 
-**Tableo 1.1.1** est une application Windows en français pour préparer les événements : plans de salle, mobilier, réservations, attribution des places, accueil et service.
+**Tableo 1.2.0** est une application Windows en français pour préparer les événements : plans de salle, mobilier, réservations, attribution des places, accueil et service.
 
 L’application fonctionne **localement, sans compte**. Vos événements restent sur votre ordinateur. Android, la sauvegarde en ligne, le travail collaboratif et les rôles sont envisagés pour une future version 2 et ne sont pas inclus dans cette version.
 
@@ -36,7 +36,7 @@ Voir [Données et mises à jour](DONNEES-ET-MISES-A-JOUR.md) pour les détails d
 - Stock de mobilier, formes et capacités configurables, places adaptées, tables de service et propagation des propriétés aux pièces existantes.
 - Placement manuel ou automatique, rotation, choix du point de départ et appui aux murs autorisés.
 - Barre d’outils du plan : sélection, filtres, déplacement d’ensembles, rotation, mesure, édition, ajout et recentrage. Magnétisme vers les tables, murs et objets.
-- Zones libres, obstacles, entrées, sorties et portes. Couleurs et remplissages des zones, dont un mode invisible ; tables toujours au premier plan.
+- Zones libres, obstacles, entrées, sorties et portes. Couleurs et remplissages des zones, dont un mode invisible ; ordre d’affichage personnalisable.
 - Réservations par groupe, noms individuels facultatifs, repas, allergies et besoins de mobilité. Import CSV et attribution automatique ou manuelle, avec verrouillage.
 - Noms des personnes/groupes affichables sur les places à un zoom suffisant. Tables grises lorsqu’elles sont vides, orange pâle lorsqu’elles sont partiellement occupées, vert pâle lorsqu’elles sont pleines.
 - Légende avec formes et couleurs distinctes pour les repas, les allergies et la mobilité/PMR.
@@ -51,8 +51,8 @@ Voir [Données et mises à jour](DONNEES-ET-MISES-A-JOUR.md) pour les détails d
 1. Créer l’événement et choisir son type, puis définir le repas, les côtés d’assise et l’objectif de participants.
 2. Choisir ou créer la salle et placer les zones, obstacles et accès.
 3. Définir le mobilier et ses quantités. Une capacité de **zéro** identifie une table de service, exclue de la disposition automatique.
-4. Ouvrir **Confort** pour conserver ou ajuster les repères et les valeurs proposées.
-5. Placer les tables manuellement ou utiliser **Disposer tables**. Pour un marché ou une brocante, choisir éventuellement un parcours.
+4. Ouvrir **Confort** de l’événement pour conserver ou ajuster les repères et les valeurs proposées.
+5. Placer les tables manuellement ou utiliser **Disposer mobilier**. Pour un marché ou une brocante, choisir éventuellement un parcours.
 6. Saisir/importer les réservations, les besoins individuels et les souhaits de proximité, puis attribuer les groupes aux tables.
 7. Examiner les contrôles et vérifier les conditions réelles avant d’exporter les documents utiles.
 
@@ -80,18 +80,18 @@ Ces écarts sont distincts des allées et des réserves d’assise. Les zones et
 
 ## Parcours des exposants
 
-Disponible uniquement pour **Personnalisé, Marché de Noël et Brocante**, depuis **Disposer tables**.
+Disponible uniquement pour **Personnalisé, Marché de Noël et Brocante**, depuis **Disposer mobilier**.
 
 - **Ouvert** : disposition optimisée avec des allées reliées et des raccourcis possibles. Une rangée simple garde une réserve pour un seul exposant ; le calcul peut ajouter une rangée sur le mur opposé.
 - **Fermé** : recherche d’un parcours imposé, sans raccourci permettant de manquer des exposants. Le tracé bleu seul ne prouve pas la fermeture ; les variantes non réalisables sont signalées sans remplacement silencieux par un parcours ouvert.
 
-Les options règlent l’orientation, la réserve dos à dos, les tables de fermeture entre les rangées ou à l’extérieur et les murs autorisés, dont **Tous les murs**. Les tables peuvent pivoter automatiquement sans changer leurs dimensions. En parcours, seuls les bords de connexion peuvent toucher un mur autorisé ; les côtés où les exposants s’assoient gardent leur réserve.
+Les options règlent l’orientation, les tables de fermeture entre les rangées ou à l’extérieur et les murs autorisés, dont **Tous les murs**. Les tables peuvent pivoter automatiquement sans changer leurs dimensions. En parcours, seuls les bords de connexion peuvent toucher un mur autorisé ; les côtés où les exposants s’assoient gardent leur réserve.
 
 L’aperçu reprend le plan actuel. Sélectionner les zones à desservir, par exemple un bar : le parcours doit rejoindre un bord accessible, sans traverser la zone ni placer une table devant son accès. Une zone servant d’allée peut être déclarée traversable pour les visiteurs et reste interdite aux tables. Ces choix sont distincts des préférences privées de proximité.
 
 Une entrée seule permet de rechercher un retour à cette entrée ; les entrées et sorties multiples sont raccordées lorsque la configuration le permet. Les objets fixés, tables de service et accès restent en place. Les tables incompatibles ou en excédent restent hors salle avec une explication.
 
-Le calcul affiche une animation et bloque les clics répétés. Les tracés peuvent être masqués, y compris dans le PDF. Après un changement de géométrie ou de réglage, redisposer pour mettre à jour les repères devenus obsolètes.
+Le calcul affiche une animation et bloque les clics répétés. Les tracés peuvent être masqués, y compris dans le PDF. Après une modification, le dernier tracé peut rester affiché en pointillés. Recalculer est une suggestion facultative ; garder le plan actuel reste possible.
 
 ## Réservations, proximité et accès PMR
 
@@ -113,7 +113,7 @@ Une entrée unique ou une sortie unique reste commune à tous, indépendamment d
 
 ## Confort de l’événement
 
-Le bouton **Confort** du plan ou de la vue Événements regroupe :
+La rubrique **Confort** de l’événement regroupe :
 
 - largeur d’une place ordinaire et d’une place PMR ;
 - profondeur réservée derrière une assise et pour un fauteuil ;
@@ -163,7 +163,7 @@ flutter pub get
 flutter analyze
 flutter test
 python tools/test_publication.py
-flutter build windows --release --dart-define=TABLEO_GITHUB_REPOSITORY=freakbn777/Tableo
+flutter build windows --release --no-tree-shake-icons --dart-define=TABLEO_GITHUB_REPOSITORY=freakbn777/Tableo
 python tools/package_release.py
 ```
 
@@ -176,3 +176,47 @@ Les essais locaux utilisent **python tools/package_release.py --local**, qui act
 ## Évolutions envisagées
 
 La version 2 pourrait proposer Android avec un périmètre adapté aux petits écrans, une sauvegarde en ligne, le travail en équipe et des rôles à définir. Les fonctionnalités en ligne pourraient nécessiter une option payante ; l’objectif est de conserver autant que possible une utilisation locale gratuite. Le périmètre et le financement restent à préciser selon l’intérêt et les retours des organisateurs.
+
+## Sièges, stands et outils de la version 1.2.0
+
+La version 1.2.0 étend la gestion aux stands, sièges autonomes et plans annotés. Le [changelog](CHANGELOG.md#120) détaille les nouveautés depuis 1.1.1.
+
+- Dans **Événements → Propriétés → Attribution**, choisir places assises ou exposants/stands, l’unité des stands (tables ou mètres) et le placement libre ou attribué. Ces réglages définissent les nouveaux éléments ; les événements peuvent conserver un mélange d’usages.
+- Dans **Mobilier**, ajouter des tables, des chaises, des chaises enfant, des bancs ou des emplacements PMR sans chaise. La capacité des bancs suit la largeur par personne de **Confort**. Sur le plan, **Modifier** permet de régler l’usage d’une pièce ; avec plusieurs pièces sélectionnées, l’outil de modification propose un changement d’usage collectif.
+- Dans **Réservations → Modifier**, choisir places assises ou stand, la demande et, pour le métrage, le partage éventuel d’une table. **Tables** permet d’attribuer les tables ou portions manuellement ; l’attribution automatique garde les éléments verrouillés. Le métrage ne comprend ni les allées ni les écarts de jonction.
+- Double-cliquer une chaise ou un banc, ou choisir **Places numérotées et réservées** dans les propriétés d’une table, pour fixer une personne à une place ou bloquer cette place. Le placement libre conserve ces choix et compare les effectifs à la capacité sans attribuer le reste automatiquement.
+- Avec des chaises, bancs ou emplacements PMR sur le plan, **Disposer mobilier → Sièges face à une scène** propose les rangées droites, l’éventail et l’arc partiel. Choisir une zone libre représentant la scène. Les modes et angles appartiennent à Disposer ; toutes les distances restent dans Confort.
+- Les noms et portions de stands apparaissent sur le plan et dans les fiches PDF. Les sauvegardes et apports conservent les nouvelles attributions ; les préférences privées de proximité restent absentes des PDF.
+
+L’option **Prévoir des repas** de l’événement commande toujours les préférences et légendes de repas, quel que soit l’usage du mobilier.
+
+Les stands par tables entières ou en mètres linéaires utilisent par défaut un seul modèle de table (dimensions identiques), sur une suite contiguë. Dans les propriétés de l’événement, ouvrir « Attribution : sièges, stands et placement libre » pour autoriser la mixité si nécessaire. La disposition regroupe les modèles de stands, sous réserve des contraintes de fermeture et de l’espace disponible.
+
+Dans la barre d’outils du plan, Ajouter → Image permet d’insérer des images PNG ou JPEG (10 Mo maximum par fichier). Répéter l’action pour ajouter plusieurs images. Les images sont incorporées au projet et aux PDF, sous les zones et le mobilier, sans bloquer les placements. Double-cliquer pour modifier leur nom, leurs dimensions et leur verrouillage ; utiliser les poignées pour redimensionner, l’outil rotation pour pivoter et Suppr pour retirer. Vider la salle propose une catégorie Images indépendante.
+
+Ajouter → Espace informatif propose cinq formes : rectangle, carré, cercle, ovale et triangle, avec un remplissage ou un contour seul. Le cercle et le carré conservent leurs proportions. Ajouter → Flèche crée une flèche décorative avec couleur, opacité, dimensions et angle réglables. Ces objets se déplacent, se redimensionnent, se verrouillent et se suppriment ; les flèches restent au-dessus du mobilier. Ils sont inclus dans les sauvegardes complètes et les plans PDF et n’influencent aucun calcul de disposition.
+
+Les poignées de redimensionnement des images, espaces informatifs et flèches sont affichées au-dessus de tout le plan lorsque l’objet est sélectionné et modifiable. La barre d’outils « Ordre d’affichage », ainsi que le clic droit, proposent Avancer d’un niveau, Reculer d’un niveau, Mettre au premier plan et Mettre à l’arrière-plan. Ces commandes concernent aussi le mobilier et les zones et peuvent s’appliquer à une sélection ; elles sont annulables et leur résultat est sauvegardé et repris dans les PDF. Elles ne changent aucune position ni règle de collision.
+
+Sur le plan, un premier clic sélectionne un objet et affiche les poignées disponibles. Un deuxième clic sur cette sélection, suffisamment espacé pour ne pas être un double-clic, affiche un cadre et des ancres rondes de rotation ; un clic supplémentaire revient au mode précédent. Faire glisser une ancre pour tourner librement, ou maintenir Maj pour des pas de 15°. Les emplacements PMR et les sélections multiples sont pris en charge. Le double-clic rapide ouvre toujours les propriétés. Les objets fixés et les plans verrouillés restent protégés ; les dimensions des modèles de mobilier ne sont pas modifiées par la rotation.
+
+Maintenir Maj en faisant glisser une poignée de redimensionnement conserve les proportions initiales de l’objet, même incliné ; relâcher Maj autorise de nouveau une largeur et une hauteur indépendantes. Les cercles et les carrés gardent toujours leur forme. Lors d’une rotation, Maj reste associé aux pas de 15°.
+
+Les réservations peuvent porter une adresse e-mail et un téléphone facultatifs. La liste d’attente dispose de ses propres exports PDF et CSV ; les coordonnées sont conservées dans les sauvegardes complètes.
+
+Le mobilier propose aussi les chaises enfant (une place, repère CE), avec dimensions initiales réglables dans Confort et espacements communs aux autres sièges.
+
+Chaque réservation peut demander un nombre de chaises enfant, limité au nombre de personnes et au stock autorisé encore disponible. Les réservations en attente conservent leur demande sans réserver le stock avant confirmation.
+
+Les besoins de chaise enfant apparaissent sur le plan et son PDF avec un repère carré. Les exports récapitulatif, accueil et liste d’attente détaillent les fauteuils roulants, autres besoins de mobilité et chaises enfant avec leurs quantités.
+
+## Raccourcis, filtres et protection du plan
+
+- **Suppr** ou **Retirer** enlève la sélection immédiatement ; Annuler restaure les objets et leurs assignations sans modifier le stock.
+- **Échap** ferme une fenêtre de propriétés ; **Entrée** enregistre ; **Tab** et **Maj+Tab** parcourent les champs.
+- **Filtrer** propose les catégories présentes et les états libre, partiellement attribué, entièrement attribué ou disponibilité restante, pour les sièges et les stands.
+- **Verrouiller le plan** protège la disposition tout en permettant les réservations. **Verrouiller l’événement** passe l’ensemble en lecture seule.
+- L’outil **Vider la salle** permet de retirer les catégories choisies ; les modèles de l’inventaire sont conservés.
+- La renumérotation est facultative, précédée d’un aperçu et annulable. Si des étiquettes sont déjà imprimées, conserver les numéros ou protéger ceux qui doivent rester fixes.
+
+Pour exporter la liste d’attente, cocher **Liste d’attente** dans **Fichiers → Export PDF**, ou choisir ce contenu dans **Exporter en CSV**. Les PDF d’organisation récapitulent les besoins spéciaux ; vérifier le destinataire avant de partager des documents contenant des coordonnées ou des besoins personnels.

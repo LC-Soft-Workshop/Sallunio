@@ -6,6 +6,66 @@ import 'attributions_test.dart' show SnapshotStore, desktop;
 
 void main() {
   test(
+    'Selected furniture only is removed and numbered seat links are cleaned',
+    () {
+      final p = demoProject();
+      final first = tables(p).first;
+      rows(p, 'groups').first['seats'] = [
+        {'number': 1, 'table': first['id'], 'slot': 0, 'fixed': true},
+      ];
+      first['fixed'] = true;
+      clearRoom(p, {'tables'}, furnitureIds: {first['id'] as String});
+      expect(tables(p).length, 6);
+      clearRoom(
+        p,
+        {'tables'},
+        includeLocked: true,
+        furnitureIds: {first['id'] as String},
+      );
+      expect(tables(p).length, 5);
+      expect(rows(p, 'types').length, 3);
+      expect(
+        (rows(p, 'groups').first['seats'] as List).single.containsKey('table'),
+        false,
+      );
+    },
+  );
+  testWidgets(
+    'Clear dialog selects a model without deleting other furniture or stock',
+    (t) async {
+      desktop(t);
+      final store = SnapshotStore();
+      final first = tables(store.saved).first;
+      final model = rows(
+        store.saved,
+        'types',
+      ).firstWhere((m) => m['id'] == first['type']);
+      final ids = tables(store.saved)
+          .where((i) => i['type'] == model['id'])
+          .map((i) => i['id'])
+          .toSet();
+      final before = tables(store.saved).length;
+      await t.pumpWidget(Tableo(store: store));
+      await t.pumpAndSettle();
+      await t.ensureVisible(find.byTooltip('Vider la salle'));
+      await t.pumpAndSettle();
+      await t.tap(find.byTooltip('Vider la salle'));
+      await t.pumpAndSettle();
+      expect(find.text('Assignations'), findsOneWidget);
+      expect(find.text('Modèles de mobilier dans l’inventaire'), findsNothing);
+      final checkbox = find.text('${model['name']} (${ids.length})');
+      await t.ensureVisible(checkbox);
+      await t.tap(checkbox);
+      await t.pumpAndSettle();
+      await t.tap(find.text('Vider les éléments cochés'));
+      await t.pumpAndSettle();
+      expect(tables(store.saved).length, before - ids.length);
+      expect(rows(store.saved, 'types').length, 3);
+      expect(t.takeException(), isNull);
+    },
+  );
+
+  test(
     'Clearing zones preserves tables, stock, assignments and access objects',
     () {
       final p = demoProject();
@@ -34,17 +94,16 @@ void main() {
     expect(rows(p, 'types').length, 3);
     validateProject(p);
   });
-  test('Types can be cleared without removing or moving placed furniture', () {
-    final p = demoProject();
-    final before = tables(p).map(clone).toList();
-    clearRoom(p, {'types'});
-    expect(rows(p, 'types'), isEmpty);
-    for (var i = 0; i < before.length; i++) {
-      before[i].remove('type');
-      expect(tables(p)[i], before[i]);
-    }
-    validateProject(p);
-  });
+  test(
+    'Room clearing never removes inventory even with legacy types choice',
+    () {
+      final p = demoProject();
+      final before = clone(p);
+      clearRoom(p, {'types'}, includeLocked: true);
+      expect(p, before);
+      expect(roomClearChoices, isNot(contains('types')));
+    },
+  );
   test('Clear all selected elements keeps reservations and proximity', () {
     final p = demoProject();
     allocate(p);
@@ -52,7 +111,7 @@ void main() {
     setReservationPreference(p, gs.first, gs.last['id'], 'near');
     clearRoom(p, roomClearChoices.keys.toSet(), includeLocked: true);
     expect(rows(p, 'items'), isEmpty);
-    expect(rows(p, 'types'), isEmpty);
+    expect(rows(p, 'types').length, 3);
     expect(workspaceStats(p)['reserved'], 19);
     expect(reservationPreferences(p, gs.first)[gs.last['id']], 'near');
     validateProject(p);
@@ -68,14 +127,18 @@ void main() {
       ).firstWhere((i) => i['kind'] == 'zone')['fixed'] = false;
       await tester.pumpWidget(Tableo(store: store));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Vider la salle'));
+      await tester.ensureVisible(find.byTooltip('Vider la salle'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Vider la salle'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Zones'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Annuler'));
       await tester.pumpAndSettle();
       expect(rows(store.saved, 'items').length, rows(initial, 'items').length);
-      await tester.tap(find.text('Vider la salle'));
+      await tester.ensureVisible(find.byTooltip('Vider la salle'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Vider la salle'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Zones'));
       await tester.pumpAndSettle();

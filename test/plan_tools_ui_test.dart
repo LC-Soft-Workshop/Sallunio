@@ -29,10 +29,10 @@ void main() {
       await tester.tap(find.text('Réservations').first);
       await tester.pumpAndSettle();
       await tester.ensureVisible(
-        find.text('Besoins et repas', skipOffstage: false).first,
+        find.text('Préférences', skipOffstage: false).first,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Besoins et repas').first);
+      await tester.tap(find.text('Préférences').first);
       await tester.pumpAndSettle();
       final name = find.byKey(const ValueKey('person-name-0'));
       await tester.ensureVisible(name);

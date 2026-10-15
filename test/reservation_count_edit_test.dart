@@ -35,8 +35,23 @@ void main() {
       await tester.tap(find.text('Modifier'));
       await tester.pumpAndSettle();
       final field = find.byWidgetPredicate(
-        (w) => w is TextField && w.decoration?.labelText == 'Effectif',
+        (w) =>
+            w is TextField && w.decoration?.labelText == 'Nombre de personnes',
       );
+      final childField = find.byWidgetPredicate(
+        (w) =>
+            w is TextField &&
+            (w.decoration?.labelText ?? '').startsWith('Chaises enfant ('),
+      );
+      await tester.enterText(childField, '1');
+      await tester.tap(find.text('Enregistrer'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('encore disponible(s) dans le stock autorisé'),
+        findsOneWidget,
+      );
+      expect(rows(store.saved, 'groups').single['count'], 3);
+      await tester.enterText(childField, '0');
       await tester.enterText(field, '30');
       await tester.tap(find.text('Enregistrer'));
       await tester.pumpAndSettle();

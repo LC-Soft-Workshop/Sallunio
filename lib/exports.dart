@@ -23,20 +23,33 @@ Future<void> exportPdf(
   bool includeCards = true,
   bool includeReception = false,
   bool includeService = false,
+  bool includeWaiting = false,
   bool includePlaceLabels = false,
+  bool includeLegend = true,
+  String planAudience = 'Organisation',
+  int planColumns = 1,
+  int planRows = 1,
 }) async {
   final p = clone(source); // Capture before the first asynchronous operation.
+  if (planColumns < 1 || planColumns > 6 || planRows < 1 || planRows > 6) {
+    throw const FormatException('Choisir de 1 à 6 feuilles par axe.');
+  }
+  final waiting = rows(p, 'groups').where((g) => g['waiting'] == true).toList();
+  p['groups'] = rows(p, 'groups').where((g) => g['waiting'] != true).toList();
+  final planMarkers = planAudience == 'Organisation';
   if (cardsOnly) {
     includePlan = false;
     includeSummary = false;
     includeCards = true;
     includeReception = false;
     includeService = false;
+    includeWaiting = false;
   }
   if (!includePlan &&
       !includeSummary &&
       !includeCards &&
       !includeReception &&
+      !includeWaiting &&
       !includeService) {
     throw const FormatException('Choisir au moins un élément à exporter.');
   }
@@ -44,8 +57,12 @@ Future<void> exportPdf(
       !includePlan &&
       !includeSummary &&
       !includeReception &&
+      !includeWaiting &&
       !includeService &&
-      !tables(p).any((t) => occupancy(p, t['id']) > 0)) {
+      !tables(p).any(
+        (t) =>
+            occupancy(p, t['id']) > 0 || standPortions(p, t['id']).isNotEmpty,
+      )) {
     throw const FormatException(
       'Aucune table occupée : attribuer les réservations avant de générer les fiches.',
     );
@@ -68,7 +85,100 @@ Future<void> exportPdf(
   final font = fontFile.existsSync()
       ? pw.Font.ttf((await fontFile.readAsBytes()).buffer.asByteData())
       : pw.Font.helvetica();
-  final theme = pw.ThemeData.withFont(base: font, bold: font);
+  Future<pw.Font> variantFont(String name) async {
+    final file = File(
+      '${Platform.environment['WINDIR'] ?? 'C:/Windows'}/Fonts/$name',
+    );
+    return file.existsSync()
+        ? pw.Font.ttf((await file.readAsBytes()).buffer.asByteData())
+        : font;
+  }
+
+  final theme = pw.ThemeData.withFont(
+    base: font,
+    bold: await variantFont('arialbd.ttf'),
+    italic: await variantFont('ariali.ttf'),
+    boldItalic: await variantFont('arialbi.ttf'),
+  );
+  List<pw.Widget> annotationPdfWidgets(
+    double scale,
+    bool foreground, [
+    String? onlyItemId,
+  ]) => [
+    for (final item in rows(p, 'items').where(
+      (i) => foreground
+          ? ['text', 'arrow'].contains(i['kind'])
+          : i['kind'] == 'info',
+    )) ...[
+      if (onlyItemId == null || item['id'] == onlyItemId) ...[
+        if (!foreground || item['kind'] == 'arrow')
+          pw.Positioned(
+            left: number(item['x']) * scale,
+            top: number(item['y']) * scale,
+            child: rotatedPdfLabel(
+              item,
+              pw.SvgImage(
+                svg: annotationFigureSvg(item),
+                width: number(item['w']) * scale,
+                height: number(item['h']) * scale,
+              ),
+            ),
+          ),
+        if (item['kind'] != 'arrow')
+          pw.Positioned(
+            left:
+                (number(item['x']) +
+                    (!foreground ? number(item['labelDx']) : 0)) *
+                scale,
+            top:
+                (number(item['y']) +
+                    (!foreground
+                        ? number(item['h']) -
+                              .06 +
+                              number(item['labelDy']) -
+                              number(item['fontSize'], 16) /
+                                  50 *
+                                  1.2 *
+                                  '${item['label']}'.split('\n').length
+                        : 0)) *
+                scale,
+            child: rotatedPdfLabel(
+              item,
+              pw.Container(
+                width: number(item['w']) * scale,
+                height: !foreground
+                    ? number(item['fontSize'], 16) *
+                          scale /
+                          50 *
+                          1.2 *
+                          '${item['label']}'.split('\n').length
+                    : null,
+                child: pw.FittedBox(
+                  fit: pw.BoxFit.scaleDown,
+                  child: pw.Text(
+                    item['label'],
+                    textAlign: pw.TextAlign.center,
+                    style: pw.TextStyle(
+                      fontSize: number(item['fontSize'], 16) * scale / 50,
+                      fontWeight: item['bold'] == true
+                          ? pw.FontWeight.bold
+                          : pw.FontWeight.normal,
+                      fontStyle: item['italic'] == true
+                          ? pw.FontStyle.italic
+                          : pw.FontStyle.normal,
+                      decoration: item['underline'] == true
+                          ? pw.TextDecoration.underline
+                          : pw.TextDecoration.none,
+                      color: PdfColor.fromInt(0xff123c38),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    ],
+  ];
   final ts = tables(p);
   final cardStyle = p['tableCards'] as Map? ?? {};
   final cardMessage = (cardStyle['message'] ?? '').toString().trim();
@@ -81,7 +191,272 @@ Future<void> exportPdf(
     490 / number(p['room']['width']),
     550 / number(p['room']['height']),
   );
-  if (includePlan) {
+  List<pw.Widget> layerSeatLabels(Json table, double scale) {
+    final labels = tablePlaceLabels(p, table, geometry);
+    final points = placeLabelPositions(
+      geometry.view(table),
+      labels.length,
+      geometry.blocked[table['id']] ?? {},
+    ).map((point) => rotatedLocalPoint(table, point)).toList();
+    return [
+      for (var i = 0; i < points.length; i++)
+        pw.Positioned(
+          left: (number(table['x']) + points[i].x - .26) * scale,
+          top: (number(table['y']) + points[i].y - .1) * scale,
+          child: pw.Container(
+            width: .52 * scale,
+            height: .2 * scale,
+            alignment: pw.Alignment.center,
+            decoration: pw.BoxDecoration(
+              color: PdfColor.fromInt(
+                labels[i] == null ? 0xfff1f3f2 : 0xffe1efe7,
+              ),
+              border: pw.Border.all(
+                color: PdfColor.fromInt(0xff527567),
+                width: .008 * scale,
+              ),
+            ),
+            child: pw.FittedBox(
+              fit: pw.BoxFit.scaleDown,
+              child: pw.Text(
+                labels[i] ?? 'Libre',
+                style: pw.TextStyle(
+                  fontSize: .095 * scale,
+                  color: PdfColor.fromInt(0xff123c38),
+                ),
+              ),
+            ),
+          ),
+        ),
+    ];
+  }
+
+  pw.Widget orderedPlanCanvas(double scale) {
+    final ordered = planPaintOrder(p);
+    final routeIndex = ordered.indexWhere(
+      (i) => !isPlanAnnotation(i) || ['arrow', 'text'].contains(i['kind']),
+    );
+    pw.Widget svgLayer({bool grid = false, bool route = false, String? id}) =>
+        pw.Positioned(
+          left: 0,
+          top: 0,
+          child: pw.SvgImage(
+            svg: planSvg(
+              p,
+              withGrid: grid,
+              includeRoute: route,
+              drawItems: id != null,
+              onlyItemId: id,
+              sharedGeometry: geometry,
+              showMarkers: planMarkers,
+              transparentBackground: true,
+            ),
+            width: number(p['room']['width']) * scale,
+            height: number(p['room']['height']) * scale,
+          ),
+        );
+    return pw.Container(
+      width: number(p['room']['width']) * scale,
+      height: number(p['room']['height']) * scale,
+      decoration: pw.BoxDecoration(
+        color: PdfColors.white,
+        border: pw.Border.all(),
+      ),
+      child: pw.Stack(
+        children: [
+          svgLayer(grid: true),
+          for (final (index, item) in ordered.indexed) ...[
+            if (index == routeIndex) svgLayer(route: true),
+            if (item['kind'] == 'image')
+              pw.Positioned(
+                left: number(item['x']) * scale,
+                top: number(item['y']) * scale,
+                child: rotatedPdfLabel(
+                  item,
+                  pw.Image(
+                    pw.MemoryImage(base64Decode(item['imageData'])),
+                    width: number(item['w']) * scale,
+                    height: number(item['h']) * scale,
+                    fit: pw.BoxFit.fill,
+                  ),
+                ),
+              ),
+            if (['info', 'text', 'arrow'].contains(item['kind']))
+              ...annotationPdfWidgets(
+                scale,
+                item['kind'] != 'info',
+                item['id'],
+              ),
+            if (!isPlanAnnotation(item) && visibleInPlanPdf(item)) ...[
+              svgLayer(id: item['id']),
+              pw.Positioned(
+                left: number(item['x']) * scale,
+                top: number(item['y']) * scale,
+                child: rotatedPdfLabel(
+                  item,
+                  pw.Container(
+                    width: number(item['w']) * scale,
+                    height: number(item['h']) * scale,
+                    padding: const pw.EdgeInsets.all(2),
+                    alignment: pw.Alignment.center,
+                    child: pw.FittedBox(
+                      fit: pw.BoxFit.scaleDown,
+                      child: pw.Text(
+                        isSeatingFurniture(item)
+                            ? planAudience == 'Visiteurs'
+                                  ? furnitureShortLabel(item)
+                                  : furniturePlanLabel(p, item)
+                            : '${item['label']}',
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(
+                          fontSize: 8,
+                          color: PdfColor.fromInt(0xff123c38),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (includePlaceLabels &&
+                  planAudience == 'Organisation' &&
+                  isSeatingFurniture(item))
+                ...layerSeatLabels(item, scale),
+            ],
+          ],
+          if (routeIndex < 0) svgLayer(route: true),
+        ],
+      ),
+    );
+  }
+
+  pw.Widget planCanvas(double scale) => p['planLayerOrder'] is List
+      ? orderedPlanCanvas(scale)
+      : pw.Container(
+          width: number(p['room']['width']) * scale,
+          height: number(p['room']['height']) * scale,
+          decoration: pw.BoxDecoration(
+            color: PdfColors.white,
+            border: pw.Border.all(),
+          ),
+          child: pw.Stack(
+            children: [
+              for (final item in rows(
+                p,
+                'items',
+              ).where((i) => i['kind'] == 'image'))
+                pw.Positioned(
+                  left: number(item['x']) * scale,
+                  top: number(item['y']) * scale,
+                  child: rotatedPdfLabel(
+                    item,
+                    pw.Image(
+                      pw.MemoryImage(base64Decode(item['imageData'])),
+                      width: number(item['w']) * scale,
+                      height: number(item['h']) * scale,
+                      fit: pw.BoxFit.fill,
+                    ),
+                  ),
+                ),
+              ...annotationPdfWidgets(scale, false),
+              for (final foreground in [false, true]) ...[
+                pw.Positioned(
+                  left: 0,
+                  top: 0,
+                  child: pw.SvgImage(
+                    svg: planSvg(
+                      p,
+                      tablesOnly: foreground,
+                      withGrid: !foreground,
+                      showMarkers: planMarkers,
+                      transparentBackground: true,
+                    ),
+                    width: number(p['room']['width']) * scale,
+                    height: number(p['room']['height']) * scale,
+                  ),
+                ),
+                ...planPaintOrder(p)
+                    .where(
+                      (item) =>
+                          visibleInPlanPdf(item) &&
+                          !isPlanAnnotation(item) &&
+                          isSeatingFurniture(item) == foreground,
+                    )
+                    .map(
+                      (t) => pw.Positioned(
+                        left: number(t['x']) * scale,
+                        top: number(t['y']) * scale,
+                        child: rotatedPdfLabel(
+                          t,
+                          pw.Container(
+                            width: number(t['w']) * scale,
+                            height: number(t['h']) * scale,
+                            padding: const pw.EdgeInsets.all(2),
+                            alignment: pw.Alignment.center,
+                            child: pw.FittedBox(
+                              fit: pw.BoxFit.scaleDown,
+                              child: pw.Text(
+                                isSeatingFurniture(t)
+                                    ? planAudience == 'Visiteurs'
+                                          ? furnitureShortLabel(t)
+                                          : furniturePlanLabel(p, t)
+                                    : '${t['label']}',
+                                textAlign: pw.TextAlign.center,
+                                style: pw.TextStyle(
+                                  fontSize: 8,
+                                  color: PdfColor.fromInt(0xff123c38),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+              ],
+              ...annotationPdfWidgets(scale, true),
+              if (includePlaceLabels && planAudience == 'Organisation')
+                ...ts.expand((table) {
+                  final labels = tablePlaceLabels(p, table, geometry);
+                  final points = placeLabelPositions(
+                    geometry.view(table),
+                    labels.length,
+                    geometry.blocked[table['id']] ?? {},
+                  ).map((point) => rotatedLocalPoint(table, point)).toList();
+                  return [
+                    for (var i = 0; i < points.length; i++)
+                      pw.Positioned(
+                        left: (number(table['x']) + points[i].x - .26) * scale,
+                        top: (number(table['y']) + points[i].y - .1) * scale,
+                        child: pw.Container(
+                          width: .52 * scale,
+                          height: .2 * scale,
+                          alignment: pw.Alignment.center,
+                          decoration: pw.BoxDecoration(
+                            color: PdfColor.fromInt(
+                              labels[i] == null ? 0xfff1f3f2 : 0xffe1efe7,
+                            ),
+                            border: pw.Border.all(
+                              color: PdfColor.fromInt(0xff527567),
+                              width: .008 * scale,
+                            ),
+                          ),
+                          child: pw.FittedBox(
+                            fit: pw.BoxFit.scaleDown,
+                            child: pw.Text(
+                              labels[i] ?? 'Libre',
+                              style: pw.TextStyle(
+                                fontSize: .095 * scale,
+                                color: PdfColor.fromInt(0xff123c38),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ];
+                }),
+            ],
+          ),
+        );
+  if (includePlan && planColumns == 1 && planRows == 1) {
     doc.addPage(
       pw.Page(
         theme: theme,
@@ -100,146 +475,147 @@ Future<void> exportPdf(
               style: const pw.TextStyle(fontSize: 8),
             ),
             pw.SizedBox(height: 16),
-            pw.Container(
-              width: number(p['room']['width']) * scale,
-              height: number(p['room']['height']) * scale,
-              decoration: pw.BoxDecoration(border: pw.Border.all()),
-              child: pw.Stack(
-                children: [
-                  for (final foreground in [false, true]) ...[
-                    pw.Positioned(
-                      left: 0,
-                      top: 0,
-                      child: pw.SvgImage(
-                        svg: planSvg(
-                          p,
-                          tablesOnly: foreground,
-                          withGrid: !foreground,
-                        ),
-                        width: number(p['room']['width']) * scale,
-                        height: number(p['room']['height']) * scale,
-                      ),
-                    ),
-                    ...planPaintOrder(p)
-                        .where(
-                          (item) =>
-                              visibleInPlanPdf(item) &&
-                              (item['kind'] == 'table') == foreground,
-                        )
-                        .map(
-                          (t) => pw.Positioned(
-                            left: number(t['x']) * scale,
-                            top: number(t['y']) * scale,
-                            child: pw.Container(
-                              width: number(t['w']) * scale,
-                              height: number(t['h']) * scale,
-                              padding: const pw.EdgeInsets.all(2),
-                              alignment: pw.Alignment.center,
-                              child: pw.FittedBox(
-                                fit: pw.BoxFit.scaleDown,
-                                child: pw.Text(
-                                  '${t['label']}${t['kind'] == 'table'
-                                      ? t['capacity'] == 0
-                                            ? '\nService'
-                                            : '\n${occupancy(p, t['id'])}/${geometry.capacity(t)}'
-                                      : ''}',
-                                  textAlign: pw.TextAlign.center,
-                                  style: pw.TextStyle(
-                                    fontSize: 8,
-                                    color: PdfColor.fromInt(0xff123c38),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                  ],
-                  if (includePlaceLabels)
-                    ...ts.expand((table) {
-                      final labels = tablePlaceLabels(p, table, geometry);
-                      final points = placeLabelPositions(
-                        geometry.view(table),
-                        labels.length,
-                        geometry.blocked[table['id']] ?? {},
-                      );
-                      return [
-                        for (var i = 0; i < points.length; i++)
-                          pw.Positioned(
-                            left:
-                                (number(table['x']) + points[i].x - .26) *
-                                scale,
-                            top:
-                                (number(table['y']) + points[i].y - .1) * scale,
-                            child: pw.Container(
-                              width: .52 * scale,
-                              height: .2 * scale,
-                              alignment: pw.Alignment.center,
-                              decoration: pw.BoxDecoration(
-                                color: PdfColor.fromInt(
-                                  labels[i] == null ? 0xfff1f3f2 : 0xffe1efe7,
-                                ),
-                                border: pw.Border.all(
-                                  color: PdfColor.fromInt(0xff527567),
-                                  width: .008 * scale,
-                                ),
-                              ),
-                              child: pw.FittedBox(
-                                fit: pw.BoxFit.scaleDown,
-                                child: pw.Text(
-                                  labels[i] ?? 'Libre',
-                                  style: pw.TextStyle(
-                                    fontSize: .095 * scale,
-                                    color: PdfColor.fromInt(0xff123c38),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                      ];
-                    }),
-                ],
-              ),
-            ),
+            planCanvas(scale),
             pw.SizedBox(height: 16),
             pw.Text(
               'Plan de préparation. Contrôles indicatifs par boîtes englobantes. Passage cible : ${p['aisle']} m. Vérifier sur site les sorties, portes et cheminements accessibles.',
               style: const pw.TextStyle(fontSize: 9),
             ),
-            pw.Text(
-              'Légende : gris = vide ; orange pâle = partiellement occupée ; vert pâle = pleine ; rouge = conflit.',
-              style: const pw.TextStyle(fontSize: 9),
-            ),
-            pw.SizedBox(height: 8),
-            pw.Wrap(
-              spacing: 10,
-              runSpacing: 4,
-              children: [
-                for (final entry in planMarkerColors(p).entries)
-                  if (tables(p).any(
-                    (table) => tableMarkers(p, table['id']).contains(entry.key),
-                  ))
-                    pw.Row(
-                      mainAxisSize: pw.MainAxisSize.min,
-                      children: [
-                        pw.Container(
-                          width: 6,
-                          height: 6,
-                          decoration: pw.BoxDecoration(
-                            color: PdfColor.fromInt(entry.value),
-                            shape: pw.BoxShape.circle,
-                          ),
+            if (includeLegend) ...[
+              pw.Text(
+                'Légende : gris = vide ; orange pâle = partiellement occupée ; vert pâle = pleine ; rouge = conflit.',
+                style: const pw.TextStyle(fontSize: 9),
+              ),
+              pw.SizedBox(height: 8),
+              pw.Wrap(
+                spacing: 10,
+                runSpacing: 4,
+                children: [
+                  if (planMarkers)
+                    for (final entry in planMarkerColors(p).entries)
+                      if (tables(p).any(
+                        (table) =>
+                            tableMarkers(p, table['id']).contains(entry.key),
+                      ))
+                        pw.Row(
+                          mainAxisSize: pw.MainAxisSize.min,
+                          children: [
+                            pw.SvgImage(
+                              svg:
+                                  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 14 14">${planMarkerSvg(entry.key, entry.value, 7, 7)}</svg>',
+                              width: 8,
+                              height: 8,
+                            ),
+                            pw.SizedBox(width: 4),
+                            pw.Text(
+                              entry.key,
+                              style: const pw.TextStyle(fontSize: 8),
+                            ),
+                          ],
                         ),
-                        pw.SizedBox(width: 4),
-                        pw.Text(
-                          entry.key,
-                          style: const pw.TextStyle(fontSize: 8),
-                        ),
-                      ],
-                    ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ],
         ),
+      ),
+    );
+  }
+  if (includePlan && (planColumns > 1 || planRows > 1)) {
+    final tileScale = min(
+      520 * planColumns / number(p['room']['width']),
+      620 * planRows / number(p['room']['height']),
+    );
+    final width = number(p['room']['width']) * tileScale / planColumns,
+        height = number(p['room']['height']) * tileScale / planRows;
+    for (var row = 0; row < planRows; row++) {
+      for (var col = 0; col < planColumns; col++) {
+        final sheet = row * planColumns + col + 1;
+        doc.addPage(
+          pw.Page(
+            theme: theme,
+            pageFormat: PdfPageFormat.a4,
+            margin: const pw.EdgeInsets.all(35),
+            build: (_) => pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  '${p['name']} — plan assemblé',
+                  style: const pw.TextStyle(fontSize: 16),
+                ),
+                pw.Text(
+                  'Feuille $sheet / ${planColumns * planRows} — rangée ${row + 1}, colonne ${col + 1}',
+                ),
+                pw.SizedBox(height: 10),
+                pw.Container(
+                  decoration: pw.BoxDecoration(border: pw.Border.all()),
+                  child: pw.ClipRect(
+                    child: pw.SizedBox(
+                      width: width,
+                      height: height,
+                      child: pw.Stack(
+                        children: [
+                          pw.Positioned(
+                            left: -col * width,
+                            top: -row * height,
+                            child: planCanvas(tileScale),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                pw.SizedBox(height: 8),
+                pw.Text(
+                  'Assembler en $planColumns colonnes et $planRows rangées. Imprimer à 100 %. Couper les marges le long du cadre.',
+                  style: const pw.TextStyle(fontSize: 8),
+                ),
+                pw.Text(
+                  'Gauche : ${col > 0 ? sheet - 1 : 'bord'} • Droite : ${col + 1 < planColumns ? sheet + 1 : 'bord'} • Haut : ${row > 0 ? sheet - planColumns : 'bord'} • Bas : ${row + 1 < planRows ? sheet + planColumns : 'bord'}',
+                  style: const pw.TextStyle(fontSize: 8),
+                ),
+                if (includeLegend && planMarkers)
+                  pw.Text(
+                    planMarkerColors(p).keys
+                        .where(
+                          (key) => tables(
+                            p,
+                          ).any((t) => tableMarkers(p, t['id']).contains(key)),
+                        )
+                        .join(' • '),
+                    style: const pw.TextStyle(fontSize: 8),
+                  ),
+                if (includeLegend)
+                  pw.Text(
+                    'Légende : gris = vide ; orange = partiellement occupée ; vert = pleine ; rouge = conflit.',
+                    style: const pw.TextStyle(fontSize: 8),
+                  ),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+  }
+  if (includeSummary && rows(p, 'groups').any(isStandBooking)) {
+    doc.addPage(
+      pw.MultiPage(
+        theme: theme,
+        pageFormat: PdfPageFormat.a4,
+        build: (_) => [
+          pw.Text(
+            'Exposants et stands',
+            style: const pw.TextStyle(fontSize: 20),
+          ),
+          pw.Text(standSummaryLabel(p)),
+          for (final g in rows(p, 'groups').where(isStandBooking))
+            pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(vertical: 6),
+              child: pw.Text(
+                '${g['name']} - ${g['standUnit'] == 'Mètres linéaires' ? '${number(g['requestedMetres']).toStringAsFixed(2)} m demandés' : '${g['requestedTables'] ?? 1} table(s) demandée(s)'}\n${standAllocationText(p, g)}',
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -252,14 +628,16 @@ Future<void> exportPdf(
           pw.Text(p['name'], style: const pw.TextStyle(fontSize: 20)),
           pw.SizedBox(height: 8),
           pw.Text(
-            'Réservations et repas',
+            mealsEnabled(p) ? 'Réservations et repas' : 'Réservations',
             style: const pw.TextStyle(fontSize: 20),
           ),
           pw.SizedBox(height: 12),
           pw.TableHelper.fromTextArray(
             headers: [
               'Référent',
-              'Places',
+              rows(p, 'groups').any(isStandBooking)
+                  ? 'Places / demande'
+                  : 'Places',
               'Tables',
               mealsEnabled(p) ? 'Repas / besoins' : 'Besoins',
             ],
@@ -267,16 +645,22 @@ Future<void> exportPdf(
                 .map(
                   (g) => [
                     g['name'],
-                    '${g['count']}',
-                    (g['alloc'] as List)
-                        .map(
-                          (a) =>
-                              '${ts.where((t) => t['id'] == a['table']).first['label']} (${a['count']})',
-                        )
-                        .join(', '),
+                    isStandBooking(g)
+                        ? (g['standUnit'] == 'Mètres linéaires'
+                              ? '${g['requestedMetres']} m'
+                              : '${g['requestedTables'] ?? 1} tables')
+                        : '${g['count']}',
+                    isStandBooking(g)
+                        ? standAllocationText(p, g)
+                        : (g['alloc'] as List)
+                              .map(
+                                (a) =>
+                                    '${ts.where((t) => t['id'] == a['table']).first['label']} (${a['count']})',
+                              )
+                              .join(', '),
                     mealsEnabled(p)
-                        ? '${g['meal']}\n${g['allergy']} ${g['needs']}'
-                        : '${g['allergy']} ${g['needs']}',
+                        ? '${g['meal']}\n${g['allergy']}\n${reservationSpecialNeeds(g)}'
+                        : reservationSpecialNeeds(g),
                   ],
                 )
                 .toList(),
@@ -301,12 +685,60 @@ Future<void> exportPdf(
                   pw.Text('Places anonymes : ${g['name']}'),
                   ...((g['seats'] as List).cast<Json>().take(g['count'])).map(
                     (s) => pw.Text(
-                      'Place ${s['number']} : ${mealsEnabled(p) ? '${s['meal']} ; ' : ''} ${s['need']} ; allergies ${s['allergy']} ; accompagnant ${s['companion']}',
+                      'Place ${s['number']} : ${mealsEnabled(p) ? '${s['meal']} ; ' : ''} ${s['need'] ?? ''}${(s['number'] as int) <= (g['childChairs'] as int? ?? 0) ? ' ; chaise enfant' : ''}${mealsEnabled(p) ? ' ; allergies ${s['allergy'] ?? ''}' : ''} ; accompagnant ${s['companion'] ?? ''}',
                       style: const pw.TextStyle(fontSize: 9),
                     ),
                   ),
                 ],
               ),
+        ],
+      ),
+    );
+  }
+  if (includeWaiting) {
+    doc.addPage(
+      pw.MultiPage(
+        theme: theme,
+        pageFormat: PdfPageFormat.a4,
+        build: (_) => [
+          pw.Text(p['name'], style: const pw.TextStyle(fontSize: 20)),
+          pw.Text('Liste d’attente', style: const pw.TextStyle(fontSize: 18)),
+          pw.SizedBox(height: 8),
+          pw.Text(
+            '${waiting.length} réservation(s) en attente - non attribuées.',
+          ),
+          pw.SizedBox(height: 14),
+          if (waiting.isEmpty)
+            pw.Text('Aucune réservation en attente.')
+          else
+            pw.TableHelper.fromTextArray(
+              headers: [
+                'Référent / exposant',
+                'Effectif',
+                'Demande',
+                'Coordonnées',
+                'Besoins spéciaux',
+              ],
+              data: waiting
+                  .map(
+                    (g) => [
+                      g['name'],
+                      '${g['count']}',
+                      isStandBooking(g)
+                          ? '${g['standUnit'] == 'Mètres linéaires' ? g['requestedMetres'] : g['requestedTables']} ${g['standUnit'] == 'Mètres linéaires' ? 'm linéaires' : 'table(s)'}'
+                          : 'Places assises',
+                      [g['contact'], g['email'], g['phone']]
+                          .where(
+                            (v) => v != null && v.toString().trim().isNotEmpty,
+                          )
+                          .join('\n'),
+                      reservationSpecialNeeds(g),
+                    ],
+                  )
+                  .toList(),
+              cellStyle: const pw.TextStyle(fontSize: 10),
+              cellPadding: const pw.EdgeInsets.all(7),
+            ),
         ],
       ),
     );
@@ -335,6 +767,7 @@ Future<void> exportPdf(
               'Référent / groupe',
               'Effectif',
               'Tables et places',
+              'Besoins spéciaux',
             ],
             data: groups
                 .map(
@@ -343,6 +776,7 @@ Future<void> exportPdf(
                     g['name'],
                     '${g['count']}',
                     _assignedTableText(p, g),
+                    reservationSpecialNeeds(g),
                   ],
                 )
                 .toList(),
@@ -372,7 +806,8 @@ Future<void> exportPdf(
           if (mealsEnabled(p)) group['meal'],
           [
             if ((group['needs'] ?? '').toString().isNotEmpty) group['needs'],
-            if ((group['allergy'] ?? '').toString().isNotEmpty)
+            if (mealsEnabled(p) &&
+                (group['allergy'] ?? '').toString().isNotEmpty)
               'Allergies : ${group['allergy']}',
             if ((group['seats'] as List? ?? []).isNotEmpty)
               'Voir détails par réservation',
@@ -420,7 +855,7 @@ Future<void> exportPdf(
               'Référent / groupe',
               'Places',
               if (mealsEnabled(p)) 'Repas par défaut',
-              'Besoins / allergies',
+              mealsEnabled(p) ? 'Besoins / allergies' : 'Besoins',
             ],
             data: serviceRows,
             cellStyle: const pw.TextStyle(fontSize: 10),
@@ -452,29 +887,35 @@ Future<void> exportPdf(
                         ))
                       if ((mealsEnabled(p) && seat['meal'] != group['meal']) ||
                           (seat['need'] ?? '') != '' ||
-                          (seat['allergy'] ?? '') != '' ||
+                          (mealsEnabled(p) && (seat['allergy'] ?? '') != '') ||
                           (seat['companion'] ?? '') != '')
                         pw.Text(
-                          'Place ${seat['number']} : ${mealsEnabled(p) ? '${seat['meal']} ; ' : ''}${seat['need']} ; allergies ${seat['allergy']} ; accompagnant ${seat['companion']}',
+                          'Place ${seat['number']} : ${mealsEnabled(p) ? '${seat['meal']} ; ' : ''}${seat['need']}${mealsEnabled(p) ? ' ; allergies ${seat['allergy']}' : ''} ; accompagnant ${seat['companion']}',
                           style: const pw.TextStyle(fontSize: 10),
                         ),
                   ],
                 ),
           ],
-          if (rows(p, 'groups').any(
-            (group) =>
-                (group['alloc'] as List).fold<int>(
-                  0,
-                  (sum, a) => sum + (a['count'] as int),
-                ) <
-                group['count'],
-          )) ...[
+          if (!freeSeating(p) &&
+              rows(p, 'groups')
+                  .where((g) => !isStandBooking(g))
+                  .any(
+                    (group) =>
+                        (group['alloc'] as List).fold<int>(
+                          0,
+                          (sum, a) => sum + (a['count'] as int),
+                        ) <
+                        group['count'],
+                  )) ...[
             pw.SizedBox(height: 14),
             pw.Text(
               'Personnes restant à placer',
               style: const pw.TextStyle(fontSize: 16),
             ),
-            for (final group in rows(p, 'groups'))
+            for (final group in rows(
+              p,
+              'groups',
+            ).where((g) => !isStandBooking(g)))
               if ((group['alloc'] as List).fold<int>(
                     0,
                     (sum, a) => sum + (a['count'] as int),
@@ -489,7 +930,13 @@ Future<void> exportPdf(
     );
   }
   final occupiedTables = includeCards
-      ? ts.where((t) => occupancy(p, t['id']) > 0).toList()
+      ? ts
+            .where(
+              (t) =>
+                  occupancy(p, t['id']) > 0 ||
+                  standPortions(p, t['id']).isNotEmpty,
+            )
+            .toList()
       : <Json>[];
   for (var i = 0; i < occupiedTables.length; i += 4) {
     final batch = occupiedTables.skip(i).take(4).toList();
@@ -515,14 +962,22 @@ Future<void> exportPdf(
                       style: const pw.TextStyle(fontSize: 30),
                     ),
                     pw.Text(
-                      '${occupancy(p, t['id'])} / ${geometry.capacity(t)} places utilisables',
+                      furnitureUse(t) == furnitureUses[1]
+                          ? '${standLength(t).toStringAsFixed(2)} m de table'
+                          : '${occupancy(p, t['id'])} / ${usableSeatCapacity(p, t)} places utilisables',
                     ),
-                    if (geometry.capacity(t) < t['capacity'])
+                    if (furnitureUse(t) == furnitureUses.first &&
+                        geometry.capacity(t) < t['capacity'])
                       pw.Text(
                         '${t['capacity']} déclarées ; assises retirées aux jonctions',
                         style: const pw.TextStyle(fontSize: 9),
                       ),
                     pw.SizedBox(height: 15),
+                    for (final a in standPortions(p, t['id']))
+                      pw.Text(
+                        '${a['name']} : ${a['whole'] == true ? 'table entière - ' : ''}${number(a['length']).toStringAsFixed(2)} m',
+                        style: const pw.TextStyle(fontSize: 11),
+                      ),
                     ...rows(p, 'groups')
                         .where(
                           (g) => (g['alloc'] as List).any(
@@ -588,6 +1043,10 @@ Future<void> exportPdf(
 }
 
 String _assignedTableText(Json p, Json group) {
+  if (isStandBooking(group)) {
+    final text = standAllocationText(p, group);
+    return text.isEmpty ? 'Stand non attribué' : text;
+  }
   final assigned = (group['alloc'] as List).fold<int>(
     0,
     (sum, a) => sum + (a['count'] as int),
@@ -599,7 +1058,9 @@ String _assignedTableText(Json p, Json group) {
       )
       .toList();
   if (assigned < group['count']) {
-    labels.add('${(group['count'] as int) - assigned} à placer');
+    labels.add(
+      '${(group['count'] as int) - assigned} ${freeSeating(p) ? 'en placement libre' : 'à placer'}',
+    );
   }
   return labels.isEmpty ? 'Sans attribution' : labels.join(', ');
 }
@@ -612,3 +1073,6 @@ String _alphabeticalKey(String name) => name
     .replaceAll(RegExp('[ôö]'), 'o')
     .replaceAll(RegExp('[ùûü]'), 'u')
     .replaceAll('ç', 'c');
+
+pw.Widget rotatedPdfLabel(Json t, pw.Widget child) =>
+    pw.Transform.rotate(angle: -number(t['angle']) * pi / 180, child: child);

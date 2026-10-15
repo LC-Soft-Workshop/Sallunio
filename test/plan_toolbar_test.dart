@@ -9,10 +9,25 @@ import 'joining_test.dart' show table;
 
 Finder tool(String id) => find.byKey(ValueKey('plan-tool-$id'));
 Future<void> clickTool(WidgetTester tester, String id) async {
-  await tester.ensureVisible(tool(id));
+  final target = id == 'assembly'
+      ? 'select'
+      : id == 'labels'
+      ? 'display'
+      : id;
+  await tester.ensureVisible(tool(target));
   await tester.pumpAndSettle();
-  await tester.tap(tool(id));
+  await tester.tap(tool(target));
   await tester.pumpAndSettle();
+  if (id == 'assembly' || id == 'labels') {
+    await tester.tap(
+      find.byWidgetPredicate(
+        (w) =>
+            w is CheckedPopupMenuItem<String> &&
+            w.value == (id == 'assembly' ? 'group' : 'names'),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
 }
 
 Json paintedTable(WidgetTester tester, String id) => tester
@@ -32,17 +47,17 @@ void main() {
       await tester.pumpAndSettle();
       for (final name in [
         'magnet',
-        'labels',
+        'display',
         'select',
         'filter',
-        'assembly',
         'rotate',
         'measure',
         'adapted',
         'fixed',
         'edit',
-        'tables',
-        'objects',
+        'add',
+        'clear-room',
+        'settings',
         'joining',
         'wall',
         'center',
@@ -98,7 +113,19 @@ void main() {
     await tester.pumpAndSettle();
     expect(store.saved, before);
     await clickTool(tester, 'labels');
-    expect(tester.widget<IconButton>(tool('labels')).isSelected, true);
+    await clickTool(tester, 'display');
+    expect(
+      tester
+          .widget<CheckedPopupMenuItem<String>>(
+            find.byWidgetPredicate(
+              (w) => w is CheckedPopupMenuItem<String> && w.value == 'names',
+            ),
+          )
+          .checked,
+      true,
+    );
+    await tester.tap(find.text('Afficher les noms sur le mobilier'));
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
   testWidgets(

@@ -25,7 +25,7 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - name: Compiler avec le dépôt de mises à jour
-        run: flutter build windows --release --dart-define=TABLEO_GITHUB_REPOSITORY=${{ github.repository }}
+        run: flutter build windows --release --no-tree-shake-icons --dart-define=TABLEO_GITHUB_REPOSITORY=${{ github.repository }}
       - name: Préparer la livraison sans données personnelles
         run: python tools/package_release.py
       - name: Publier une version et ses changements en français

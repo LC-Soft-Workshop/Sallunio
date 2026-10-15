@@ -44,7 +44,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Disposer tables'));
+      await tester.tap(find.text('Disposer mobilier'));
       await tester.pumpAndSettle();
       final snapshot = find.byKey(const ValueKey('parcours-snapshot'));
       final rect = tester.getRect(snapshot), scale = rect.width / 18;
@@ -90,7 +90,7 @@ void main() {
       );
       expect(parcoursWarnings(p), isEmpty);
       expect(p['parcoursPlan']['services'].single['id'], 'bar');
-      await tester.tap(find.text('Disposer tables'));
+      await tester.tap(find.text('Disposer mobilier'));
       await tester.pumpAndSettle();
       final refreshed = tester.widget<ParcoursSnapshot>(
         find.byType(ParcoursSnapshot),

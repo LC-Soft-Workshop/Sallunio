@@ -36,7 +36,7 @@ MagneticSnap magneticSnap(Json p, Set<String> ids, {double threshold = .14}) {
   final stationary = rows(
     p,
     'items',
-  ).where((i) => !ids.contains(i['id'])).toList();
+  ).where((i) => !ids.contains(i['id']) && !isPlanAnnotation(i)).toList();
   final proposals = <_Proposal>[];
   void propose(
     double dx,
@@ -70,6 +70,7 @@ MagneticSnap magneticSnap(Json p, Set<String> ids, {double threshold = .14}) {
           by = number(b['y']),
           bw = number(b['w']),
           bh = number(b['h']);
+      if (number(a['angle']) != 0 || number(b['angle']) != 0) continue;
       final pair = a['kind'] == 'table' && b['kind'] == 'table';
       for (final junction in pair ? [true, false] : [true]) {
         for (final side in ['left', 'right', 'top', 'bottom']) {
@@ -277,7 +278,7 @@ MagneticSnap magneticSnap(Json p, Set<String> ids, {double threshold = .14}) {
     final geo = PlanGeometry(p, combined);
     var valid = true;
     for (final item in shifted) {
-      if (item['kind'] == 'table') {
+      if (isSeatingFurniture(item)) {
         if (!fits(p, item, combined, geometry: geo)) {
           valid = false;
           break;

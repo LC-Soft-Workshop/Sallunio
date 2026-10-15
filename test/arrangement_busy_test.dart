@@ -29,7 +29,7 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Disposer tables'));
+        await tester.tap(find.text('Disposer mobilier'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Disposer'));
         await tester.pump();
@@ -56,7 +56,7 @@ void main() {
         expect(
           tester
               .widget<FilledButton>(
-                find.widgetWithText(FilledButton, 'Disposer tables'),
+                find.widgetWithText(FilledButton, 'Disposer mobilier'),
               )
               .onPressed,
           isNotNull,

@@ -3,6 +3,57 @@
 Historique en français, établi à partir des validations conservées du projet.
 Les anciennes versions ne constituent pas des livraisons GitHub rétroactives.
 
+## 1.2.0
+
+Évolutions depuis **1.1.1**. Version Windows locale, sans compte ni envoi des événements sur Internet.
+
+### Mobilier, sièges et stands
+
+- Tables, chaises, bancs, chaises enfant et emplacements PMR autonomes ; création par catégorie avec dimensions et noms adaptés. La capacité d’un banc dépend de sa longueur et de la largeur par personne définie dans Confort.
+- Usage du mobilier : places assises, stand/exposition ou service, réglable individuellement ou sur une sélection. La propagation d’un modèle transmet aussi son usage aux pièces existantes ; les nouveaux déploiements conservent cet usage.
+- Réservations pour des places assises ou pour un stand, en tables entières ou mètres linéaires. Les événements peuvent mêler les usages ; Personnalisé conserve les possibilités des autres activités.
+- Attribution des stands par portions colorées, noms affichables, tables exclusives ou partagées, modèle souhaité, attribution manuelle/automatique et verrouillage. Une demande de métrage reste contiguë et ne franchit ni allée ni portion déjà attribuée ; les jonctions ne sont pas comptées.
+- Un seul modèle de table par stand par défaut, en tables comme en mètres. Mixité autorisable dans les paramètres d’attribution ; la disposition regroupe les modèles sous réserve des contraintes géométriques.
+- Sièges et places numérotés, réservables ou bloquables individuellement. Placement libre possible, avec contrôle du nombre de réservations sans assignation automatique.
+- Disposition devant une zone scène : rangées droites, éventail à trois blocs ou arc partiel. Inclinaisons orientées vers la scène, réglages d’angles dans Disposer mobilier, distances dans Confort, dégagement des blocs latéraux et dimensions conservées.
+- Ordre naturel des numéros lorsque les dimensions permettent de le respecter. Chaises repérées C et chaises enfant CE ; libellés adaptés aux petits objets et infobulles détaillées sur tout le mobilier.
+- Nombre de chaises enfant par réservation, limité au nombre de personnes et au stock autorisé restant. Les demandes en attente ne consomment pas le stock ; la confirmation vérifie la disponibilité. Dimensions proposées réglables dans Confort.
+- Parcours réservés aux tables Stand / exposition : message explicite si seules des tables Places assises sont disponibles, sans déplacer le plan.
+
+### Plan de salle et outils
+
+- Barre d’outils réorganisée : menus Sélection, Ajouter, Affichage et outils complémentaires. Icône correspondant au mode de sélection actif, retour à la cible pour le magnétisme, ressources d’icônes complètes et retrait des cases vides.
+- Ajout de mobilier avec quantité et disponibilité autorisée restante ; dernière pièce ajoutée directement, modèles épuisés grisés avec explication. Vider la salle est accessible dans les outils et Disposer mobilier au-dessus de la légende.
+- Filtres adaptés aux catégories présentes ; libres, partiellement attribués, entièrement attribués et disponibilité restante fonctionnent pour les places assises et les stands partagés. Outil désactivé sans mobilier.
+- Sélection multiple, rectangle et groupée avec Ctrl. Rectangle de sélection accéléré, recherche, alignement, répartition, déplacement précis et duplication dans la limite du stock.
+- Retirer et Suppr agissent sans confirmation, avec annulation. Le retrait des objets hors salle et Vider la salle conservent toujours les modèles et quantités de l’inventaire. Le vidage permet de choisir les modèles placés et les catégories d’objets.
+- Renumérotation volontaire avec aperçu, avertissement pour les étiquettes déjà imprimées, numéros protégés et annulation.
+- Premier clic pour sélectionner ; clic supplémentaire espacé pour alterner redimensionnement et rotation libre, y compris pour les emplacements PMR et sélections multiples. Double-clic rapide conservé pour les propriétés.
+- Maj conserve les proportions pendant le redimensionnement et applique des pas de 15° pendant la rotation. Poignées alignées sur les objets inclinés et toujours visibles au-dessus du plan lorsque la sélection est modifiable.
+- Ordre d’affichage : avancer/reculer d’un niveau, premier/arrière-plan, dans les outils et le menu contextuel. Ordre sauvegardé et repris dans les PDF, sans modifier la géométrie.
+- Espaces informatifs rectangulaires, carrés, ronds, ovales ou triangulaires, avec remplissage ou contour. Nom centré en bas et déplaçable séparément ; aucun effet sur les placements.
+- Textes libres avec taille, gras, italique, souligné, orientation et rotation ; flèches décoratives ; images PNG/JPEG intégrées. Déplacement, dimensions, verrouillage, retrait, sauvegarde et export PDF.
+- Verrou du plan permettant de poursuivre les réservations et assignations sans changer la disposition ; verrou d’événement en lecture seule avec navigation et exports accessibles.
+- Vue mémorisée par événement ; dernier parcours modifié affichable en pointillés et recalcul présenté comme facultatif.
+- Échap ferme les propriétés, Entrée valide, Tab/Maj+Tab parcourent les champs. Suppr reste une touche de saisie dans les champs.
+
+### Réservations et événements
+
+- Onglets d’événements réorganisables par glisser-déposer ; icône automatique selon l’activité ou choix parmi 14 icônes.
+- Menu Préférences stable : champs et légendes de repas/allergies affichés uniquement si Prévoir des repas est activé. Les données restent conservées pour une réactivation ultérieure.
+- Adresse e-mail et téléphone facultatifs par réservation, recherchables et conservés dans les sauvegardes. Libellé Nombre de personnes dans les propriétés.
+- Liste d’attente exclue des attributions automatiques, filtres de réservations, détection de noms/contacts similaires, échange contrôlé des assignations et explications des demandes incomplètes.
+- Repère carré Chaise enfant sur le plan et son PDF ; besoins de fauteuil roulant, autre mobilité et chaises enfant récapitulés avec quantités dans le récapitulatif, l’accueil et la liste d’attente.
+- Titres et commandes harmonisés autour de Mobilier et Assignations ; retrait du lien redondant d’effacement des réservations.
+- Lien vers les repères officiels d’accessibilité corrigé dans les recommandations de Confort.
+
+### Exports et sauvegardes
+
+- Export PDF configurable : plan, récapitulatif, fiches, accueil, cuisine/service et liste d’attente. Option indépendante de légende sur le plan, profils Organisation/Visiteurs/Exposants, plan sur plusieurs feuilles A4 avec repères d’assemblage.
+- Export CSV séparé de la liste d’attente ; coordonnées, statut et demande de chaises enfant dans les CSV de réservations.
+- Formes et couleurs des repères cohérentes entre le plan et le PDF. Noms des stands masquables via Affichage, en conservant numéros et portions colorées.
+- Sauvegardes complètes et apports adaptés aux stands, sièges, annotations, images intégrées, ordre d’affichage, icônes et nouveaux paramètres. Préférences privées de proximité absentes des PDF.
+
 ## 1.1.1
 
 - Correction du parcours fermé lorsqu’une zone près du mur rétrécit le passage de retour : la rangée de liaison réserve désormais toute la largeur nécessaire devant les zones et obstacles périphériques.

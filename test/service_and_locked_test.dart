@@ -35,16 +35,22 @@ void main() {
       await tester.pumpAndSettle();
       expect(tables(store.saved).first['capacity'], 0);
       expect(find.text('T1\nService'), findsOneWidget);
-      await tester.tap(find.text('Vider la salle'));
+      await tester.ensureVisible(find.byTooltip('Vider la salle'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Vider la salle'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Zones'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Vider les éléments cochés'));
       await tester.pumpAndSettle();
       expect(rows(store.saved, 'items').any((i) => i['id'] == zoneId), true);
-      await tester.tap(find.text('Vider la salle'));
+      await tester.ensureVisible(find.byTooltip('Vider la salle'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Vider la salle'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Zones'));
+      await tester.ensureVisible(find.text('Inclure les éléments verrouillés'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Inclure les éléments verrouillés'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Vider les éléments cochés'));
@@ -96,11 +102,11 @@ void main() {
       final store = SnapshotStore();
       await tester.pumpWidget(Tableo(store: store));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(
-        find.byKey(const ValueKey('plan-tool-objects')),
-      );
+      await tester.ensureVisible(find.byKey(const ValueKey('plan-tool-add')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('plan-tool-objects')));
+      await tester.tap(find.byKey(const ValueKey('plan-tool-add')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Obstacle').last);
       await tester.pumpAndSettle();
       final function = find.byWidgetPredicate(
         (w) =>

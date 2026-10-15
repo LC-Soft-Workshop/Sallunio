@@ -27,7 +27,7 @@ Future<Json> immediateArrangement(Json p) async => arrangeProject(p);
 
 void main() {
   testWidgets(
-    'Selected table types bulk action is visible and preserves plan until chosen',
+    'Selected furniture types bulk action includes benches and preserves plan until chosen',
     (tester) async {
       tester.view.physicalSize = const Size(1280, 800);
       tester.view.devicePixelRatio = 1;
@@ -49,15 +49,15 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Petits côtés').last);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Ajouter toutes les tables sélectionnées'));
+      await tester.tap(find.text('Ajouter tout le mobilier sélectionné'));
       await tester.pumpAndSettle();
-      expect(tables(project).length, 3);
+      expect(tables(project).length, 11);
       expect(
         rows(project, 'items').where((i) => i['kind'] == 'bench'),
-        isEmpty,
+        hasLength(8),
       );
       expect(
-        find.text('Dernier ajout : 3 placé(s), 0 non placé(s).'),
+        find.text('Dernier ajout : 11 placé(s), 0 non placé(s).'),
         findsOneWidget,
       );
       expect(
@@ -115,12 +115,28 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Confirmer'));
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Camille fictif'),
+        150,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('reservations-list')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
       expect(find.text('Camille fictif'), findsOneWidget);
       expect(rows(project, 'groups').length, 3);
       expect(tester.takeException(), isNull, reason: 'Imported groups');
       expect(project['room'], before['room']);
       expect(project['items'], before['items']);
       expect(project['types'], before['types']);
+      await tester.ensureVisible(
+        find.widgetWithText(
+          FilledButton,
+          '2. Attribuer les groupes aux tables',
+        ),
+      );
       await tester.tap(find.text('2. Attribuer les groupes aux tables'));
       await tester.pumpAndSettle();
       expect(
@@ -132,6 +148,16 @@ void main() {
       expect(find.text('Attributions par table'), findsOneWidget);
       await tester.tap(find.text('Réservations').first);
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('T1 (6), T2 (6)'),
+        150,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('reservations-list')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
       expect(find.text('T1 (6), T2 (6)'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
@@ -219,6 +245,16 @@ void main() {
           )
           .first,
     );
+    await Scrollable.ensureVisible(
+      tester.element(
+        find.widgetWithText(
+          FilledButton,
+          '2. Attribuer les groupes aux tables',
+        ),
+      ),
+      alignment: .5,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('2. Attribuer les groupes aux tables'));
     await tester.pumpAndSettle();
     expect(find.textContaining('19 / 19 personnes attribuées.'), findsWidgets);

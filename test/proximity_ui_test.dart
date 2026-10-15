@@ -13,7 +13,11 @@ void main() {
     desktop(tester);
     await tester.pumpWidget(Tableo(store: SnapshotStore()));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Ajouter un objet ou une zone'));
+    await tester.ensureVisible(find.byTooltip('Ajouter'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Ajouter'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Obstacle').last);
     await tester.pumpAndSettle();
     final function = find.byWidgetPredicate(
       (w) =>

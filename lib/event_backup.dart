@@ -58,10 +58,10 @@ Json injectEventBackup(
         typeIds[type['id']] = copy['id'] = uid();
         rows(result, 'types').add(copy);
       }
-      for (final item in rows(
-        source,
-        'items',
-      ).where((item) => ['table', 'bench', 'banc'].contains(item['kind']))) {
+      for (final item in rows(source, 'items').where(
+        (item) =>
+            ['table', 'bench', 'banc', 'chair', 'pmr'].contains(item['kind']),
+      )) {
         final copy = clone(item);
         itemIds[item['id']] = copy['id'] = uid();
         if (copy['type'] != null) copy['type'] = typeIds[copy['type']];
@@ -91,6 +91,11 @@ Json injectEventBackup(
           for (final allocation in (group['alloc'] as List).cast<Json>())
             if (itemIds.containsKey(allocation['table']))
               {...allocation, 'table': itemIds[allocation['table']]},
+        ];
+        copy['standAlloc'] = <Json>[
+          for (final a in (group['standAlloc'] as List? ?? []).cast<Json>())
+            if (itemIds.containsKey(a['table']))
+              {...a, 'id': uid(), 'table': itemIds[a['table']]},
         ];
         copy['reserved'] = itemIds[group['reserved']] ?? '';
         for (final seat in (copy['seats'] as List? ?? []).cast<Json>()) {

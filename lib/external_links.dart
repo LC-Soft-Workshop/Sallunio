@@ -7,14 +7,19 @@ abstract class LinkOpener {
   Future<void> open(Uri uri);
 }
 
+void validateExternalLink(Uri uri) {
+  if (uri.scheme != 'https' ||
+      !{'github.com', 'www.legifrance.gouv.fr'}.contains(uri.host) ||
+      uri.userInfo.isNotEmpty ||
+      uri.hasPort && uri.port != 443) {
+    throw const FormatException('Lien HTTPS vers un site autorisé attendu.');
+  }
+}
+
 class WindowsLinkOpener implements LinkOpener {
   @override
   Future<void> open(Uri uri) async {
-    if (uri.scheme != 'https' ||
-        uri.host != 'github.com' ||
-        uri.userInfo.isNotEmpty) {
-      throw const FormatException('Lien GitHub sécurisé attendu.');
-    }
+    validateExternalLink(uri);
     if (!Platform.isWindows) {
       throw const FileSystemException(
         'Ouverture de lien Windows indisponible.',

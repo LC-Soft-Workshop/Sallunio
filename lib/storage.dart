@@ -28,6 +28,7 @@ String defaultDataDirectory({Map<String, String>? environment}) {
 class Store {
   bool demoOnEmpty = true;
   bool darkMode = false;
+  List<String> eventOrder = [];
   bool _opened = false;
   late Database db;
   late String directory;
@@ -61,7 +62,49 @@ class Store {
       whereArgs: ['dark_mode'],
     );
     darkMode = theme.isNotEmpty && theme.first['value'] == '1';
+    final order = await db.query(
+      'app_state',
+      where: 'key = ?',
+      whereArgs: ['event_order'],
+    );
+    if (order.isNotEmpty) {
+      try {
+        final parsed = jsonDecode(order.first['value'] as String);
+        if (parsed is List && parsed.every((id) => id is String)) {
+          eventOrder = parsed.cast<String>();
+        }
+      } on FormatException {
+        eventOrder = [];
+      }
+    }
     _opened = true;
+  }
+
+  List<Json> orderedEvents(List<Json> events) {
+    final ranks = {
+      for (var i = 0; i < eventOrder.length; i++) eventOrder[i]: i,
+    };
+    final original = {
+      for (var i = 0; i < events.length; i++) events[i]['id']: i,
+    };
+    return [...events]..sort((a, b) {
+      final rank = (ranks[a['id']] ?? eventOrder.length).compareTo(
+        ranks[b['id']] ?? eventOrder.length,
+      );
+      return rank != 0
+          ? rank
+          : original[a['id']]!.compareTo(original[b['id']]!);
+    });
+  }
+
+  Future<void> saveEventOrder(List<String> ids) async {
+    if (_opened) {
+      await db.insert('app_state', {
+        'key': 'event_order',
+        'value': jsonEncode(ids),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    eventOrder = [...ids];
   }
 
   Future<void> saveDarkMode(bool value) async {

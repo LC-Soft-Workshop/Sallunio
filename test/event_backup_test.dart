@@ -8,6 +8,8 @@ import 'package:tableo/event_backup.dart';
 import 'package:tableo/main.dart';
 import 'package:tableo/storage.dart';
 
+import 'plan_images_test.dart' show image;
+
 class BackupStore extends Store {
   final events = [
     demoProject()..['name'] = 'Festival été',
@@ -56,6 +58,57 @@ void main() {
       throwsFormatException,
     );
   });
+  test('Complete image backup restores embedded bytes and properties after source deletion and database restart', () async {
+    final folder = Directory('tmp/image-backup-${uid()}').absolute;
+    await folder.create(recursive: true);
+    final original = await File('test/fixtures/logo-fiches.png').readAsBytes();
+    final source = File('${folder.path}/original.png');
+    await source.writeAsBytes(original);
+    final events = [demoProject(), demoProject()];
+    for (var n = 0; n < events.length; n++) {
+      rows(events[n], 'items').addAll([
+        image('image-$n-a')
+          ..['imageData'] = base64Encode(await source.readAsBytes())
+          ..['angle'] = 90.0
+          ..['fixed'] = true,
+        image('image-$n-b')
+          ..['x'] = 4.5
+          ..['y'] = 3.25
+          ..['w'] = 2.75
+          ..['h'] = 1.25,
+      ]);
+    }
+    final backup = File('${folder.path}/complete.tableo.json');
+    await backup.writeAsString(jsonEncode(eventBackup(events)));
+    await source.delete();
+    final loaded = readEventBackup(await backup.readAsString());
+    expect(loaded, events);
+    final store = Store();
+    await store.open(path: '${folder.path}/restored');
+    try {
+      await store.saveEvents(loaded);
+    } finally {
+      await store.close();
+    }
+    final reopened = Store();
+    await reopened.open(path: '${folder.path}/restored');
+    try {
+      final restored = await reopened.load();
+      expect(restored.length, 2);
+      for (final expected in events) {
+        final actual = restored.singleWhere((p) => p['id'] == expected['id']);
+        expect(actual, expected);
+        for (final item in rows(
+          actual,
+          'items',
+        ).where((i) => i['kind'] == 'image')) {
+          expect(base64Decode(item['imageData']), original);
+        }
+      }
+    } finally {
+      await reopened.close();
+    }
+  });
   test('Event imports save together and roll back on failure', () async {
     final folder = await Directory.systemTemp.createTemp('tableo-backup-');
     final store = Store();
@@ -99,6 +152,12 @@ void main() {
           if (kind == 'zone') 'zoneFill': 'Invisible',
         });
       }
+      rows(store.events[1], 'items').addAll([
+        image('backup-image-a')
+          ..['angle'] = 90.0
+          ..['fixed'] = true,
+        image('backup-image-b')..['x'] = 6.0,
+      ]);
       final path = File('tmp/backup-ui-${uid()}.tableo.json').absolute.path;
       await tester.pumpWidget(Tableo(store: store));
       await tester.pumpAndSettle();
@@ -135,7 +194,15 @@ void main() {
       }
       await tester.pumpAndSettle();
       final saved = await tester.runAsync(() => File(path).readAsString());
-      expect(readEventBackup(saved!).length, 2);
+      final backedUp = readEventBackup(saved!);
+      expect(backedUp.length, 2);
+      expect(
+        rows(backedUp[1], 'items').where((i) => i['kind'] == 'image').toList(),
+        rows(
+          store.events[1],
+          'items',
+        ).where((i) => i['kind'] == 'image').toList(),
+      );
       await tester.tap(find.text('Fichiers ▾'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Importer projet'));

@@ -6,6 +6,76 @@ import 'package:tableo/plan_tools.dart';
 import 'package:tableo/backup_merge.dart';
 
 void main() {
+  test('Same occupancy filters handle seats and linear or whole stands', () {
+    final p = demoProject(), t = tables(demoProject()).first;
+    p['items'] = [t];
+    p['groups'] = <Json>[];
+    final geo = PlanGeometry(p, rows(p, 'items'));
+    for (final stand in [false, true]) {
+      t['usage'] = stand ? furnitureUses[1] : furnitureUses.first;
+      final g = clone(rows(demoProject(), 'groups').first);
+      g['alloc'] = <Json>[];
+      g['standAlloc'] = <Json>[];
+      p['groups'] = [g];
+      expect(tableMatchesFilter(p, t, 'Tables vides', geo), true);
+      if (stand) {
+        g['standAlloc'] = [
+          {'table': t['id'], 'offset': 0.0, 'length': standLength(t) / 2},
+        ];
+      } else {
+        g['alloc'] = [
+          {'table': t['id'], 'count': 1},
+        ];
+      }
+      expect(tableMatchesFilter(p, t, 'Tables vides', geo), false);
+      expect(tableMatchesFilter(p, t, 'Partiellement attribué', geo), true);
+      expect(tableMatchesFilter(p, t, 'Places disponibles', geo), true);
+      if (stand) {
+        g['standAlloc'][0]['length'] = standLength(t);
+      } else {
+        g['alloc'][0]['count'] = geo.capacity(t);
+      }
+      expect(tableMatchesFilter(p, t, 'Entièrement attribué', geo), true);
+      expect(tableMatchesFilter(p, t, 'Partiellement attribué', geo), false);
+      expect(tableMatchesFilter(p, t, 'Places disponibles', geo), false);
+    }
+  });
+
+  test('Plan filters follow present furniture categories and empty plans', () {
+    final p = demoProject();
+    p['items'] = <Json>[];
+    expect(availablePlanFilters(p), isEmpty);
+    final chair = <String, dynamic>{'id': 'c', 'kind': 'chair'};
+    rows(p, 'items').add(chair);
+    expect(availablePlanFilters(p).values, contains('Toutes les chaises'));
+    expect(availablePlanFilters(p).values, contains('Chaises libres'));
+    expect(
+      availablePlanFilters(p).values.any((s) => s.contains('tables')),
+      false,
+    );
+    rows(p, 'items').add({'id': 'b', 'kind': 'bench'});
+    expect(availablePlanFilters(p)['kind:bench'], 'Bancs');
+    expect(availablePlanFilters(p).containsKey('kind:table'), false);
+    expect(
+      tableMatchesFilter(
+        p,
+        chair,
+        'kind:chair',
+        PlanGeometry(p, rows(p, 'items')),
+      ),
+      true,
+    );
+    expect(
+      tableMatchesFilter(
+        p,
+        chair,
+        'kind:bench',
+        PlanGeometry(p, rows(p, 'items')),
+      ),
+      false,
+    );
+  });
+
   test('Removed or reassigned table never blocks editing a named person', () {
     final p = demoProject(), g = rows(p, 'groups')[0], t = tables(p)[0];
     g['seats'] = [

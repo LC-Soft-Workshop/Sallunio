@@ -184,7 +184,15 @@ class BackupMergePlan {
         rows(result, 'types').add(copy);
       }
       result['items'] = rows(target, 'items')
-          .where((item) => !['table', 'bench', 'banc'].contains(item['kind']))
+          .where(
+            (item) => ![
+              'table',
+              'bench',
+              'banc',
+              'chair',
+              'pmr',
+            ].contains(item['kind']),
+          )
           .map(clone)
           .toList();
       for (final item in rows(result, 'items')) {
@@ -196,10 +204,9 @@ class BackupMergePlan {
       ).map((i) => '${i['label']}'.trim().toLowerCase()).toSet();
       for (var source = -1; source < sources.length; source++) {
         final event = source < 0 ? target : sources[source];
-        for (final item in rows(
-          event,
-          'items',
-        ).where((i) => ['table', 'bench', 'banc'].contains(i['kind']))) {
+        for (final item in rows(event, 'items').where(
+          (i) => ['table', 'bench', 'banc', 'chair', 'pmr'].contains(i['kind']),
+        )) {
           final type = item['type'];
           if (type != null && !typeIds.containsKey(reference(source, type))) {
             continue;
@@ -254,6 +261,15 @@ class BackupMergePlan {
             {
               ...allocation,
               'table': itemIds[reference(entry.source, allocation['table'])],
+            },
+      ];
+      copy['standAlloc'] = <Json>[
+        for (final a in (entry.value['standAlloc'] as List? ?? []).cast<Json>())
+          if (itemIds.containsKey(reference(entry.source, a['table'])))
+            {
+              ...a,
+              'id': uid(),
+              'table': itemIds[reference(entry.source, a['table'])],
             },
       ];
       copy['reserved'] =

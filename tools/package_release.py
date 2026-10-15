@@ -6,6 +6,7 @@ import re
 import shutil
 import zipfile
 import argparse
+import struct
 
 RUNTIME_FILES = {
     'tableo.exe', 'flutter_windows.dll', 'sqlite3.dll', 'data/app.so', 'data/icudtl.dat',
@@ -32,11 +33,46 @@ def audit_runtime(source):
         raise ValueError(f'Livraison refusée : fichiers inattendus {sorted(unexpected)}, manquants {sorted(missing)}')
     return files
 
+def audit_material_icons(source):
+    """Refuse stale subsets that cannot render the plan's toolbar icons."""
+    data = (source / 'data/flutter_assets/fonts/MaterialIcons-Regular.otf').read_bytes()
+    u16 = lambda at: struct.unpack_from('>H', data, at)[0]
+    u32 = lambda at: struct.unpack_from('>I', data, at)[0]
+    try:
+        cmap = next(u32(12+n*16+8) for n in range(u16(4)) if data[12+n*16:16+n*16] == b'cmap')
+        needed = {0xf04ba: 'Sélection', 0xf4a1: 'Affichage', 0xef56: 'Vider la salle', 0xf36e: 'Réglages'}
+        present = set()
+        for n in range(u16(cmap+2)):
+            base = cmap + u32(cmap+8+n*8)
+            fmt = u16(base)
+            if fmt == 12:
+                for group in range(u32(base+12)):
+                    start, end, glyph = struct.unpack_from('>III', data, base+16+group*12)
+                    present.update(code for code in needed if start <= code <= end and glyph+code-start > 0)
+            elif fmt == 4:
+                count = u16(base+6)//2
+                for segment in range(count):
+                    end = u16(base+14+segment*2)
+                    start = u16(base+16+count*2+segment*2)
+                    delta = u16(base+16+count*4+segment*2)
+                    offset_at = base+16+count*6+segment*2
+                    offset = u16(offset_at)
+                    for code in needed:
+                        if start <= code <= end:
+                            glyph = (code+delta)&65535 if offset == 0 else u16(offset_at+offset+2*(code-start))
+                            if glyph: present.add(code)
+        missing = [needed[code] for code in needed if code not in present]
+        if missing: raise ValueError('Police d’icônes incomplète : ' + ', '.join(missing))
+    except (StopIteration, struct.error, IndexError) as error:
+        raise ValueError('Police d’icônes invalide.') from error
+
 def package(root, local=False):
     version = re.search(r'^version:\s*([\d.]+)', (root / 'pubspec.yaml').read_text(), re.M)[1]
     assert f"const appVersion = '{version}';" in (root / 'lib/app_version.dart').read_text()
     source = root / 'build/windows/x64/runner/Release'
     files = audit_runtime(source)
+    if (root / 'lib/main.dart').exists():
+        audit_material_icons(source)
     target = root / 'dist' / ('Tableo-test' if local else f'Tableo-{version}')
     archive = root / 'dist' / f'Tableo-Windows-{version}.zip'
     public_files = ['README.md', 'CHANGELOG.md', 'DONNEES-ET-MISES-A-JOUR.md', 'examples/modele-reservations.csv']

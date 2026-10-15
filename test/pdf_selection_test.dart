@@ -10,6 +10,26 @@ import 'file_dialogs_test.dart' show TestStore, TestDialogs;
 
 void main() {
   test(
+    'PDF plan can omit legend without changing reservations or source',
+    () async {
+      final p = demoProject();
+      allocate(p);
+      await Directory('tmp/pdfs').create(recursive: true);
+      for (final legend in [true, false]) {
+        await exportPdf(
+          p,
+          'tmp/pdfs/optional-legend-$legend.pdf',
+          overwriteConfirmed: true,
+          includePlan: true,
+          includeSummary: false,
+          includeCards: false,
+          includeLegend: legend,
+        );
+      }
+    },
+  );
+
+  test(
     'Export all seven nonempty combinations for content verification',
     () async {
       final p = demoProject();
@@ -63,7 +83,48 @@ void main() {
             .onChanged,
         isNull,
       );
+      expect(
+        tester
+            .widget<CheckboxListTile>(
+              find.widgetWithText(
+                CheckboxListTile,
+                'Afficher la légende sur le plan',
+              ),
+            )
+            .value,
+        true,
+      );
+      await tester.tap(
+        find.widgetWithText(
+          CheckboxListTile,
+          'Afficher la légende sur le plan',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<CheckboxListTile>(
+              find.widgetWithText(
+                CheckboxListTile,
+                'Afficher la légende sur le plan',
+              ),
+            )
+            .value,
+        false,
+      );
       await tester.tap(find.widgetWithText(CheckboxListTile, 'Plan de salle'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<CheckboxListTile>(
+              find.widgetWithText(
+                CheckboxListTile,
+                'Afficher la légende sur le plan',
+              ),
+            )
+            .onChanged,
+        isNull,
+      );
       await tester.tap(
         find.widgetWithText(CheckboxListTile, 'Récapitulatif de l’événement'),
       );
@@ -75,6 +136,18 @@ void main() {
             )
             .onPressed,
         isNull,
+      );
+      final waiting = find.widgetWithText(CheckboxListTile, 'Liste d’attente');
+      await tester.ensureVisible(waiting);
+      await tester.tap(waiting);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Continuer'),
+            )
+            .onPressed,
+        isNotNull,
       );
       await tester.tap(find.text('Annuler'));
       await tester.pumpAndSettle();

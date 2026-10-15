@@ -24,7 +24,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Disposer tables'));
+      await tester.tap(find.text('Disposer mobilier'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Disposer'));
       await tester.pumpAndSettle();

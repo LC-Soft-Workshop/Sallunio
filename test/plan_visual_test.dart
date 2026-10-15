@@ -66,7 +66,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(rotation);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Toutes les tables : 90°'));
+    await tester.tap(find.text('Tout le mobilier : 90°'));
     await tester.pumpAndSettle();
     expect(tables(project).first['w'], .8);
     expect(tester.takeException(), isNull);

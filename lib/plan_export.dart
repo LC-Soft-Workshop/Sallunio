@@ -17,14 +17,24 @@ String planMarkerSvg(String name, int color, double x, double y) {
   return '<$geometry fill="${_hex(color)}" stroke="white" stroke-width="1"/>';
 }
 
-String planSvg(Json p, {bool? tablesOnly, bool withGrid = true}) {
+String planSvg(
+  Json p, {
+  bool? tablesOnly,
+  bool withGrid = true,
+  bool showMarkers = true,
+  bool transparentBackground = false,
+  bool includeRoute = true,
+  bool drawItems = true,
+  String? onlyItemId,
+  PlanGeometry? sharedGeometry,
+}) {
   const unit = 100.0;
   final width = number(p['room']['width']) * unit,
       height = number(p['room']['height']) * unit;
-  final geometry = PlanGeometry(p, rows(p, 'items'));
+  final geometry = sharedGeometry ?? PlanGeometry(p, rows(p, 'items'));
   final markers = planMarkerColors(p);
   final svg = StringBuffer(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height">${withGrid ? '<rect width="$width" height="$height" fill="white"/>' : ''}',
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 $width $height">${withGrid && !transparentBackground ? '<rect width="$width" height="$height" fill="white"/>' : ''}',
   );
   if (withGrid) {
     for (var x = unit; x < width; x += unit) {
@@ -47,7 +57,7 @@ String planSvg(Json p, {bool? tablesOnly, bool withGrid = true}) {
     }
   }
   var index = 0;
-  if (tablesOnly != true && p['showParcours'] != false) {
+  if (includeRoute && tablesOnly != true && p['showParcours'] != false) {
     if (parcoursCurrent(p)) {
       for (final b in p['parcoursPlan']['blocks'] as List) {
         svg.write(
@@ -62,15 +72,21 @@ String planSvg(Json p, {bool? tablesOnly, bool withGrid = true}) {
       );
     }
   }
-  if (tablesOnly != true && p['showParcours'] != false && parcoursCurrent(p)) {
+  if (includeRoute &&
+      tablesOnly != true &&
+      p['showParcours'] != false &&
+      parcoursCurrent(p)) {
     for (final arrow in parcoursArrows(p)) {
       svg.write(
         '<polyline points="${arrow.map((v) => '${v.x * unit},${v.y * unit}').join(' ')}" fill="none" stroke="#1565c0" stroke-width="3"/>',
       );
     }
   }
-  for (final item in planPaintOrder(p).where(visibleInPlanPdf)) {
-    if (tablesOnly != null && (item['kind'] == 'table') != tablesOnly) continue;
+  for (final item in planPaintOrder(
+    p,
+  ).where((i) => visibleInPlanPdf(i) && !isPlanAnnotation(i))) {
+    if (!drawItems || onlyItemId != null && item['id'] != onlyItemId) continue;
+    if (tablesOnly != null && isSeatingFurniture(item) != tablesOnly) continue;
     final x = number(item['x']) * unit, y = number(item['y']) * unit;
     final w = number(item['w']) * unit, h = number(item['h']) * unit;
     final occupied = item['kind'] == 'table' ? occupancy(p, item['id']) : 0;
@@ -112,8 +128,19 @@ String planSvg(Json p, {bool? tablesOnly, bool withGrid = true}) {
         ? '#1565c0'
         : '#527567';
     svg.write(
-      '<g transform="translate($x $y)"><$shape fill="$fill"/><defs><clipPath id="clip$index"><$shape/></clipPath></defs>',
+      '<g transform="translate($x $y) rotate(${number(item['angle'])} ${w / 2} ${h / 2})"><$shape fill="$fill"/><defs><clipPath id="clip$index"><$shape/></clipPath></defs>',
     );
+    if (furnitureUse(item) == furnitureUses[1]) {
+      for (final a in standPortions(p, item['id'])) {
+        final start = number(a['offset']) / standLength(item),
+            extent = number(a['length']) / standLength(item);
+        svg.write(
+          number(item['w']) >= number(item['h'])
+              ? '<rect x="${start * w}" y="0" width="${extent * w}" height="$h" fill="${_hex(a['color'])}"/>'
+              : '<rect x="0" y="${start * h}" width="$w" height="${extent * h}" fill="${_hex(a['color'])}"/>',
+        );
+      }
+    }
     if (item['zoneFill'] == 'Hachures' ||
         item['zoneFill'] == 'Hachures croisées') {
       svg.write(
@@ -137,7 +164,7 @@ String planSvg(Json p, {bool? tablesOnly, bool withGrid = true}) {
           mx = 7;
           my -= 14;
         }
-        svg.write(planMarkerSvg(name, markers[name]!, mx, my));
+        if (showMarkers) svg.write(planMarkerSvg(name, markers[name]!, mx, my));
         mx += 14;
       }
       if (conflict) {
@@ -156,4 +183,13 @@ String planSvg(Json p, {bool? tablesOnly, bool withGrid = true}) {
   }
   svg.write('</svg>');
   return svg.toString();
+}
+
+String annotationFigureSvg(Json item) {
+  final w = number(item['w']) * 50, h = number(item['h']) * 50;
+  final shape = annotationEllipse(item)
+      ? 'ellipse cx="${w / 2}" cy="${h / 2}" rx="${w / 2}" ry="${h / 2}"'
+      : 'polygon points="${annotationVertices(item).map((v) => '${v.x * w},${v.y * h}').join(' ')}"';
+  final color = _hex(zoneColors[item['zoneColor']] ?? zoneColors['Bleu']!);
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 ${w + 2} ${h + 2}"><$shape fill="${item['annotationFill'] == 'Contour' ? 'none' : color}" fill-opacity="${number(item['opacity'], .25)}" stroke="$color" stroke-width="1"/></svg>';
 }

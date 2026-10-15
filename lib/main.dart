@@ -1,7 +1,10 @@
+import 'keyboard_dialog.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
 import 'app_version.dart';
+import 'event_icons.dart';
 import 'github_updates.dart';
 import 'external_links.dart';
 import 'event_backup.dart';
@@ -13,7 +16,8 @@ import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:flutter/gestures.dart'
+    show DragStartBehavior, kPrimaryMouseButton;
 
 import 'domain.dart';
 import 'plan_tools.dart';
@@ -30,6 +34,12 @@ import 'exports.dart';
 import 'csv_example.dart';
 import 'csv_delta.dart';
 import 'file_dialogs.dart';
+
+part 'mixed_furniture_ui.dart';
+part 'plan_workspace_ui.dart';
+part 'organizer_features_ui.dart';
+part 'plan_annotations_ui.dart';
+part 'plan_rotation_ui.dart';
 
 Json arrangeProject(Json project) {
   arrange(project);
@@ -178,6 +188,82 @@ void main(List<String> args) async {
         throw StateError('Boucle imposée non conservée en base');
       }
       await exportPdf(restoredImposed, '${args[1]}/runtime-imposed.pdf');
+      final mixed = newProject('Mobilier mixte fictif — test natif');
+      mixed['room'].addAll({'width': 16.0, 'height': 14.0});
+      mixed['mealService'] = 'Non';
+      mixed['comfort'] = {...comfortableDefaults(mixed), 'wallGap': .45};
+      mixed['items'] = <Json>[
+        {
+          'id': 'scene',
+          'kind': 'zone',
+          'shape': 'rectangle',
+          'label': 'Scène fictive',
+          'x': 5.0,
+          'y': 0.0,
+          'w': 6.0,
+          'h': 1.0,
+          'fixed': true,
+        },
+        for (var i = 0; i < 12; i++)
+          {
+            ...clone(template),
+            'id': 'seat-$i',
+            'kind': 'chair',
+            'shape': 'chaise',
+            'label': 'Chaise ${i + 1}',
+            'w': .5,
+            'h': .5,
+            'capacity': 1,
+            'fixed': false,
+          },
+        for (var i = 0; i < 2; i++)
+          {
+            ...clone(template),
+            'id': 'stand-$i',
+            'label': 'Stand ${i + 1}',
+            'usage': furnitureUses[1],
+            'x': 2.0 + i * 1.8,
+            'y': 11.0,
+          },
+      ];
+      final stand = {
+        ...clone(rows(demoProject(), 'groups').first),
+        'id': 'native-stand',
+        'name': 'Exposant fictif',
+        'count': 1,
+        'alloc': <Json>[],
+        'bookingKind': assignmentModes[1],
+        'standUnit': standUnits[1],
+        'requestedTables': 1,
+        'requestedMetres': 3.0,
+        'shareTable': 'Oui',
+        'standAlloc': <Json>[],
+      };
+      mixed['groups'] = <Json>[stand];
+      if (arrangeAudience(mixed, {
+            'scene': 'scene',
+            'side': 'Bas',
+            'layout': audienceLayouts[2],
+            'opening': 90.0,
+            'leftAngle': 45.0,
+            'rightAngle': 45.0,
+          }) !=
+          0) {
+        throw StateError('Sièges non disposés');
+      }
+      allocate(mixed);
+      validateProject(mixed);
+      await store.save(mixed);
+      final restoredMixed = (await store.load()).firstWhere(
+        (e) => e['id'] == mixed['id'],
+      );
+      validateProject(restoredMixed);
+      if (number(standSummary(restoredMixed)['assignedMetres']) != 3 ||
+          (rows(restoredMixed, 'groups').single['standAlloc'] as List).length !=
+              2) {
+        throw StateError('Métrage non conservé en base');
+      }
+      await exportPdf(restoredMixed, '${args[1]}/runtime-mixed.pdf');
       await File('${args[1]}/runtime-report.json').writeAsString(
         jsonEncode({
           'sqlite': restored.length == 1,
@@ -193,6 +279,7 @@ void main(List<String> args) async {
           },
           'countersMatchSummary': true,
           'workspaceCounters': workspaceStats(restored.first),
+          'mixedFurnitureNative': true,
           'parcoursNative': true,
           'imposedLoopNative': true,
           'parcoursTables': tables(restoredMarket).length,
@@ -341,6 +428,7 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
+  void refreshMixed(VoidCallback action) => setState(action);
   Widget themeButton() => IconButton(
     tooltip: widget.darkMode ? 'Passer au mode clair' : 'Passer au mode sombre',
     onPressed: widget.onToggleTheme,
@@ -373,34 +461,91 @@ class _HomeState extends State<Home> {
   final undo = <Json>[], redo = <Json>[];
   final transform = TransformationController();
   final cursorPosition = ValueNotifier<Offset?>(null);
-  bool showPlaceLabels = false;
+  bool showPlaceLabels = false, showLegend = true;
+  double planScale = 1;
+  Offset planOrigin = Offset.zero;
   final selectedTables = <String>{};
+  final selectedObjects = <String>{};
+  bool removingSelection = false;
+  bool reorderingEvents = false;
   bool multiSelect = false, moveAssembly = false, measuring = false;
   String planFilter = 'Toutes les tables';
+  String reservationFilter = 'Toutes';
+  bool selectRectangle = false;
+  Offset? selectionStart, selectionEnd;
+  final selectionRectangle = ValueNotifier<Rect?>(null);
+  String? reviewStamp;
+  _PlanReview? cachedReview;
+  _PlanReview planReview() {
+    final stamp = jsonEncode(p);
+    if (reviewStamp != stamp || cachedReview == null) {
+      cachedReview = _PlanReview(p!);
+      reviewStamp = stamp;
+    }
+    return cachedReview!;
+  }
+
+  Set<String> selectionBase = {};
   Offset? measureStart, measureEnd;
   Set<String> draggingTables = {};
   bool dragBlocked = false;
 
+  final planCanvasSurfaceKey = GlobalKey();
+  _PlanRotationDrag? rotationDrag;
+  bool rotationMode = false;
+  String? rotationSelectionKey;
+  bool get rotationModeActive =>
+      rotationMode &&
+      rotationSelectionKey == (selectedPlanIds().toList()..sort()).join('|');
   bool additiveClick = false;
-  void selectPlanItem(Json item, {bool? additive}) {
-    final multiple =
-        additive ?? (multiSelect || HardwareKeyboard.instance.isControlPressed);
+  void selectPlanItem(Json item, {bool? additive, bool toggleHandles = false}) {
+    final multiple = additive ?? HardwareKeyboard.instance.isControlPressed;
+    var group = moveAssembly && item['kind'] == 'table'
+        ? tables(p!)
+              .where(
+                (t) =>
+                    PlanGeometry(p!, rows(p!, 'items')).sameAssembly(item, t),
+              )
+              .map((t) => t['id'] as String)
+              .toSet()
+        : {item['id'] as String};
+    if (toggleHandles &&
+        !multiple &&
+        selectedPlanIds().contains(item['id']) &&
+        selectedPlanIds().length > 1) {
+      group = selectedPlanIds();
+    }
+    final same =
+        selectedPlanIds().length == group.length &&
+        group.every(selectedPlanIds().contains);
+    final nextRotation =
+        toggleHandles &&
+            same &&
+            !multiple &&
+            !planReadOnly &&
+            item['fixed'] != true
+        ? !rotationModeActive
+        : rotationModeActive && same && !multiple;
     setState(() {
-      selected = item['id'];
-      if (item['kind'] != 'table') {
+      rotationMode = nextRotation;
+      rotationSelectionKey = (group.toList()..sort()).join('|');
+      final remove = multiple && group.every(selectedObjects.contains);
+      if (!multiple) {
+        selectedObjects.clear();
         selectedTables.clear();
-        return;
       }
-      if (!multiple) selectedTables.clear();
-      if (!selectedTables.add(item['id'])) selectedTables.remove(item['id']);
-      if (moveAssembly && !multiple) {
-        final geo = PlanGeometry(p!, rows(p!, 'items'));
+      if (remove) {
+        selectedObjects.removeAll(group);
+        selectedTables.removeAll(group);
+      } else {
+        selectedObjects.addAll(group);
         selectedTables.addAll(
-          tables(p!)
-              .where((t) => geo.sameAssembly(item, t))
-              .map((t) => t['id'] as String),
+          group.where((id) => tables(p!).any((t) => t['id'] == id)),
         );
       }
+      selected = remove
+          ? (selectedObjects.isEmpty ? null : selectedObjects.last)
+          : item['id'];
     });
   }
 
@@ -409,20 +554,19 @@ class _HomeState extends State<Home> {
       corner,
     ) {
       final left = corner.contains('left'), top = corner.contains('top');
+      final anchor = rotatedLocalPoint(
+        item,
+        Point(left ? 0.0 : number(item['w']), top ? 0.0 : number(item['h'])),
+      );
       return Positioned(
-        left: (number(item['x']) + (left ? 0 : number(item['w']))) * scale - 12,
-        top: (number(item['y']) + (top ? 0 : number(item['h']))) * scale - 12,
+        left: (number(item['x']) + anchor.x) * scale - 12,
+        top: (number(item['y']) + anchor.y) * scale - 12,
         child: MouseRegion(
           cursor: left == top
               ? SystemMouseCursors.resizeUpLeftDownRight
               : SystemMouseCursors.resizeUpRightDownLeft,
           child: Tooltip(
-            message: const {
-              'zone': 'Redimensionner la zone',
-              'entry': 'Redimensionner l’entrée',
-              'exit': 'Redimensionner la sortie',
-              'door': 'Redimensionner la porte',
-            }[item['kind']]!,
+            message: 'Redimensionner — Maj : conserver les proportions',
             child: GestureDetector(
               key: ValueKey('resize-${item['id']}-$corner'),
               behavior: HitTestBehavior.opaque,
@@ -434,7 +578,15 @@ class _HomeState extends State<Home> {
               onPanUpdate: (d) => setState(() {
                 resizeDx += d.delta.dx / scale;
                 resizeDy += d.delta.dy / scale;
-                resizeZone(p!, item, resizeOrigin!, resizeDx, resizeDy, corner);
+                resizeZone(
+                  p!,
+                  item,
+                  resizeOrigin!,
+                  resizeDx,
+                  resizeDy,
+                  corner,
+                  preserveAspect: HardwareKeyboard.instance.isShiftPressed,
+                );
               }),
               onPanEnd: (_) => persist(),
               child: SizedBox(
@@ -476,11 +628,13 @@ class _HomeState extends State<Home> {
     toolbarScroll.dispose();
     transform.dispose();
     cursorPosition.dispose();
+    selectionRectangle.dispose();
     super.dispose();
   }
 
   Future<void> load() async {
     final list = await widget.store.load();
+    list.setAll(0, widget.store.orderedEvents(list));
     for (final event in list) {
       migrateEventSettings(event);
     }
@@ -501,10 +655,13 @@ class _HomeState extends State<Home> {
               );
         if (previous != p?['id']) {
           selected = null;
+          selectedObjects.clear();
+          selectedTables.clear();
           undo.clear();
           redo.clear();
           transform.value = Matrix4.identity();
         }
+        restorePlanView();
         loaded = true;
         status = 'Enregistré localement';
       });
@@ -519,6 +676,7 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> persist() async {
+    if (eventReadOnly) return;
     final snapshot = clone(p!);
     pendingWrites++;
     setState(() {
@@ -548,16 +706,73 @@ class _HomeState extends State<Home> {
     await pending;
   }
 
+  bool get eventReadOnly => p?['eventLocked'] == true;
+  bool get planReadOnly => eventReadOnly || p?['planLocked'] == true;
+  bool? routeVisibilityOverride;
+  bool get routeVisible =>
+      routeVisibilityOverride ?? (p?['showParcours'] != false);
+  String protectedPlan(Json project) => jsonEncode({
+    for (final key in [
+      'room',
+      'items',
+      'joining',
+      'wallSupport',
+      'comfort',
+      'aisle',
+      'seatingSides',
+      'parcoursSettings',
+      'audienceSettings',
+      'arrangementMode',
+      'arrangementCorner',
+    ])
+      key: project[key],
+  });
+  Future<void> toggleEventLock(Json event) async {
+    await pending;
+    if (!mounted) return;
+    setState(() {
+      event['eventLocked'] = event['eventLocked'] != true;
+      if (event['id'] == p?['id']) {
+        undo.clear();
+        redo.clear();
+      }
+    });
+    await widget.store.save(clone(event));
+  }
+
+  void togglePlanLock() {
+    if (eventReadOnly) return;
+    setState(() {
+      p!['planLocked'] = p!['planLocked'] != true;
+      undo.clear();
+      redo.clear();
+    });
+    persist();
+  }
+
   void change(void Function() action) {
+    if (eventReadOnly) {
+      toast('Événement verrouillé : lecture seule.');
+      return;
+    }
+    final before = planReadOnly ? clone(p!) : null;
     checkpoint();
     setState(() {
       action();
+      if (before != null && protectedPlan(before) != protectedPlan(p!)) {
+        p!.clear();
+        p!.addAll(before);
+        undo.removeLast();
+        toast(
+          'Plan verrouillé : déverrouiller le plan pour modifier le mobilier ou la disposition.',
+        );
+      }
       prunePlacePreferences(p!);
     });
     persist();
   }
 
-  Future<void> openGithub(Uri uri) async {
+  Future<void> openExternalLink(Uri uri) async {
     try {
       await (widget.linkOpener ?? WindowsLinkOpener()).open(uri);
     } catch (error) {
@@ -596,7 +811,7 @@ class _HomeState extends State<Home> {
 
   Future<void> updateDetails(UpdateInfo update) => showDialog<void>(
     context: context,
-    builder: (c) => AlertDialog(
+    builder: (c) => KeyboardDialog(
       title: Text('Tableo ${update.version} est disponible'),
       content: const SizedBox(
         width: 500,
@@ -610,11 +825,11 @@ class _HomeState extends State<Home> {
           child: const Text('Fermer'),
         ),
         TextButton(
-          onPressed: () => openGithub(update.changelogUrl),
+          onPressed: () => openExternalLink(update.changelogUrl),
           child: const Text('Voir les changements'),
         ),
         FilledButton(
-          onPressed: () => openGithub(update.releaseUrl),
+          onPressed: () => openExternalLink(update.releaseUrl),
           child: const Text('Télécharger sur GitHub'),
         ),
       ],
@@ -641,7 +856,7 @@ class _HomeState extends State<Home> {
                           installedVersion: appVersion,
                         ))
                     .changelogUrl;
-            if (url != null) openGithub(url);
+            if (url != null) openExternalLink(url);
           }
         },
         itemBuilder: (_) => [
@@ -683,7 +898,7 @@ class _HomeState extends State<Home> {
   Future<bool> confirm(String title, String detail) async =>
       await showDialog<bool>(
         context: context,
-        builder: (c) => AlertDialog(
+        builder: (c) => KeyboardDialog(
           title: Text(title),
           content: Text(detail),
           actions: [
@@ -709,7 +924,7 @@ class _HomeState extends State<Home> {
     return showDialog<String>(
       context: context,
       builder: (c) => StatefulBuilder(
-        builder: (c, update) => AlertDialog(
+        builder: (c, update) => KeyboardDialog(
           title: Text(title),
           content: SizedBox(
             width: 560,
@@ -749,7 +964,7 @@ class _HomeState extends State<Home> {
                         if (c.mounted) {
                           await showDialog<void>(
                             context: c,
-                            builder: (errorContext) => AlertDialog(
+                            builder: (errorContext) => KeyboardDialog(
                               title: const Text('Fichier inaccessible'),
                               content: Text('$e'),
                               actions: [
@@ -809,6 +1024,13 @@ class _HomeState extends State<Home> {
     Set<String> integer = const {},
     void Function(Json, String)? onChoiceChanged,
     bool autoObjectLabel = false,
+    Set<String> multiline = const {},
+    bool Function(Json, String)? fieldVisible,
+    Map<String, String> choiceLabels = const {},
+    Widget? extraContent,
+    Set<String> radioChoices = const {},
+    String Function(Json, String, String)? fieldLabel,
+    String? Function(Json)? validate,
   }) async {
     final controls = {
       for (final k in labels.keys)
@@ -820,7 +1042,7 @@ class _HomeState extends State<Home> {
     return showDialog<Json>(
       context: context,
       builder: (c) => StatefulBuilder(
-        builder: (c, update) => AlertDialog(
+        builder: (c, update) => KeyboardDialog(
           title: Text(title),
           content: SizedBox(
             width: 500,
@@ -828,68 +1050,132 @@ class _HomeState extends State<Home> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  ...labels.entries.map(
-                    (e) => Padding(
-                      padding: const EdgeInsets.only(bottom: 14),
-                      child: choices.containsKey(e.key)
-                          ? DropdownButtonFormField<String>(
-                              isExpanded: true,
-                              initialValue:
-                                  choices[e.key]!.contains('${values[e.key]}')
-                                  ? '${values[e.key]}'
-                                  : choices[e.key]!.first,
-                              items: choices[e.key]!
-                                  .map(
-                                    (v) => DropdownMenuItem(
-                                      value: v,
-                                      child: Text(
-                                        autoObjectLabel && e.key == 'kind'
-                                            ? objectLabels[v] ?? v
-                                            : v,
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                              key: ValueKey('${e.key}-${values[e.key]}'),
-                              onChanged:
-                                  e.key == '_joinGapSides' &&
-                                      values['_joinGapMode'] == 'Hériter'
-                                  ? null
-                                  : (v) => update(() {
-                                      values[e.key] = v;
-                                      if (autoObjectLabel &&
-                                          e.key == 'kind' &&
-                                          !labelModified) {
-                                        controls['label']!.text =
-                                            objectLabels[v] ?? v!;
-                                        values['label'] =
-                                            controls['label']!.text;
+                  ...labels.entries
+                      .where((e) => fieldVisible?.call(values, e.key) ?? true)
+                      .map(
+                        (e) => Padding(
+                          padding: const EdgeInsets.only(bottom: 14),
+                          child: radioChoices.contains(e.key)
+                              ? RadioGroup<String>(
+                                  groupValue: values[e.key] as String?,
+                                  onChanged: (value) => update(() {
+                                    final before = {...values};
+                                    values[e.key] = value;
+                                    onChoiceChanged?.call(values, e.key);
+                                    for (final key in controls.keys) {
+                                      if (before[key] != values[key]) {
+                                        controls[key]!.text =
+                                            '${values[key] ?? ''}';
                                       }
-                                      onChoiceChanged?.call(values, e.key);
-                                    }),
-                              decoration: InputDecoration(labelText: e.value),
-                            )
-                          : TextField(
-                              controller: controls[e.key],
-                              enabled:
-                                  e.key != '_joinGapM' ||
-                                  values['_joinGapMode'] != 'Hériter',
-                              maxLines: e.key == 'note' ? 3 : 1,
-                              maxLength: e.key == 'note' ? 1000 : null,
-                              onChanged: (_) {
-                                if (autoObjectLabel && e.key == 'label') {
-                                  labelModified = true;
-                                }
-                              },
-                              decoration: InputDecoration(
-                                labelText: e.value,
-                                helperText: e.key == '_joinGapM'
-                                    ? '0,60 m = 60 cm'
-                                    : null,
-                              ),
-                            ),
-                    ),
-                  ),
+                                    }
+                                  }),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(e.value),
+                                      Wrap(
+                                        children: [
+                                          for (final value in choices[e.key]!)
+                                            SizedBox(
+                                              width:
+                                                  values[e.key] ==
+                                                      'Emplacement PMR'
+                                                  ? 220
+                                                  : 150,
+                                              child: RadioListTile<String>(
+                                                dense: true,
+                                                contentPadding: EdgeInsets.zero,
+                                                value: value,
+                                                title: Text(value),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : choices.containsKey(e.key)
+                              ? DropdownButtonFormField<String>(
+                                  isExpanded: true,
+                                  initialValue:
+                                      choices[e.key]!.contains(
+                                        '${values[e.key]}',
+                                      )
+                                      ? '${values[e.key]}'
+                                      : choices[e.key]!.first,
+                                  items: choices[e.key]!
+                                      .map(
+                                        (v) => DropdownMenuItem(
+                                          value: v,
+                                          child: Text(
+                                            autoObjectLabel && e.key == 'kind'
+                                                ? objectLabels[v] ?? v
+                                                : choiceLabels[v] ?? v,
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
+                                  key: ValueKey('${e.key}-${values[e.key]}'),
+                                  onChanged:
+                                      e.key == '_joinGapSides' &&
+                                          values['_joinGapMode'] == 'Hériter'
+                                      ? null
+                                      : (v) => update(() {
+                                          values[e.key] = v;
+                                          if (autoObjectLabel &&
+                                              e.key == 'kind' &&
+                                              !labelModified) {
+                                            controls['label']!.text =
+                                                objectLabels[v] ?? v!;
+                                            values['label'] =
+                                                controls['label']!.text;
+                                          }
+                                          onChoiceChanged?.call(values, e.key);
+                                        }),
+                                  decoration: InputDecoration(
+                                    labelText:
+                                        fieldLabel?.call(
+                                          values,
+                                          e.key,
+                                          e.value,
+                                        ) ??
+                                        e.value,
+                                  ),
+                                )
+                              : TextField(
+                                  controller: controls[e.key],
+                                  enabled:
+                                      e.key != '_joinGapM' ||
+                                      values['_joinGapMode'] != 'Hériter',
+                                  maxLines:
+                                      e.key == 'note' ||
+                                          multiline.contains(e.key)
+                                      ? 3
+                                      : 1,
+                                  maxLength: e.key == 'note' ? 1000 : null,
+                                  onChanged: (text) {
+                                    values[e.key] = text;
+                                    if (autoObjectLabel && e.key == 'label') {
+                                      labelModified = true;
+                                    }
+                                  },
+                                  decoration: InputDecoration(
+                                    labelText:
+                                        fieldLabel?.call(
+                                          values,
+                                          e.key,
+                                          e.value,
+                                        ) ??
+                                        e.value,
+                                    helperText: e.key == '_joinGapM'
+                                        ? '0,60 m = 60 cm'
+                                        : null,
+                                  ),
+                                ),
+                        ),
+                      ),
+                  ?extraContent,
                   if (error != null)
                     Text(error!, style: const TextStyle(color: Colors.red)),
                 ],
@@ -920,8 +1206,25 @@ class _HomeState extends State<Home> {
                   }
                   if (v == null ||
                       !v.isFinite ||
-                      (k == '_joinGapM' ? v < 0 : v <= 0) ||
-                      v > (k == '_joinGapM' ? 2 : 200)) {
+                      (k == 'angle'
+                          ? v < -360
+                          : [
+                              '_joinGapM',
+                              'x',
+                              'y',
+                              'offset',
+                              'leftAngle',
+                              'rightAngle',
+                              'fanClearanceAngle',
+                            ].contains(k)
+                          ? v < 0
+                          : v <= 0) ||
+                      v >
+                          (k == '_joinGapM'
+                              ? 2
+                              : k == 'angle'
+                              ? 360
+                              : 200)) {
                     update(
                       () => error = k == '_joinGapM'
                           ? 'Espacement de jonction : nombre de 0 à 2 m.'
@@ -934,7 +1237,7 @@ class _HomeState extends State<Home> {
                 for (final k in integer) {
                   final v = int.tryParse('${values[k]}');
                   if (v == null ||
-                      v < (k == 'capacity' ? 0 : 1) ||
+                      v < (['capacity', 'childChairs'].contains(k) ? 0 : 1) ||
                       v > (k == 'capacity' ? 100 : 10000)) {
                     update(
                       () => error = k == 'capacity'
@@ -947,6 +1250,11 @@ class _HomeState extends State<Home> {
                 }
                 if (labels.containsKey('name') && '${values['name']}'.isEmpty) {
                   update(() => error = 'Un nom est nécessaire.');
+                  return;
+                }
+                final validationError = validate?.call(values);
+                if (validationError != null) {
+                  update(() => error = validationError);
                   return;
                 }
                 Navigator.pop(c, values);
@@ -984,20 +1292,33 @@ class _HomeState extends State<Home> {
       'activity': eventActivity(event),
       'mealService': mealsEnabled(event) ? 'Oui' : 'Non',
       'defaultSides': eventSeatingSides(event),
+      'assignmentMode': eventAssignmentMode(event),
+      'standUnit': event['standUnit'] ?? standUnits.first,
+      'seatingAssignment': event['seatingAssignment'] ?? 'Attribué',
     },
     {
       'name': 'Nom de l’événement',
       'activity': 'Activité',
       'mealService': 'Prévoir des repas',
       'defaultSides': 'Côtés assis par défaut',
+      'assignmentMode': 'Attribution principale',
+      'standUnit': 'Unité des stands',
+      'seatingAssignment': 'Placement des personnes',
     },
     choices: {
       'activity': roomActivities,
       'mealService': ['Oui', 'Non'],
       'defaultSides': seatingModes,
+      'assignmentMode': assignmentModes,
+      'standUnit': standUnits,
+      'seatingAssignment': ['Attribué', 'Libre'],
     },
     onChoiceChanged: (values, key) {
       if (key == 'activity') {
+        values['assignmentMode'] =
+            ['Marché de Noël', 'Brocante'].contains(values['activity'])
+            ? assignmentModes[1]
+            : assignmentModes.first;
         values['mealService'] = activityDefaults(
           values['activity'],
         )['mealService'];
@@ -1009,6 +1330,10 @@ class _HomeState extends State<Home> {
   );
 
   Future<void> comfortEdit(Json event) async {
+    if (event['eventLocked'] == true || event['planLocked'] == true) {
+      toast('Événement ou plan verrouillé.');
+      return;
+    }
     final initial = event['comfort'] == null && rows(event, 'items').isEmpty
         ? comfortableDefaults(event)
         : eventComfort(event);
@@ -1022,7 +1347,7 @@ class _HomeState extends State<Home> {
     final route = DialogRoute<void>(
       context: context,
       builder: (c) => StatefulBuilder(
-        builder: (c, update) => AlertDialog(
+        builder: (c, update) => KeyboardDialog(
           title: Text('Confort de ${event['name']}'),
           content: SizedBox(
             width: 600,
@@ -1066,7 +1391,17 @@ class _HomeState extends State<Home> {
                         ),
                         decoration: InputDecoration(
                           labelText: entry.value,
-                          helperText: entry.key == 'exhibitorGap'
+                          helperText:
+                              [
+                                'childChairWidth',
+                                'childChairDepth',
+                              ].contains(entry.key)
+                              ? 'Dimensions proposées pour les nouveaux modèles de chaises enfant. Adapter au mobilier réel ; les écarts entre sièges et entre rangées restent applicables.'
+                              : entry.key == 'fanSideGap'
+                              ? 'Éventail uniquement : recul ajouté aux sièges inclinés, avec une limite oblique près des coins de la scène. Le bloc central conserve sa propre distance.'
+                              : entry.key == 'sceneGap'
+                              ? 'Distance entre le bord de scène et les premiers sièges ; le bloc central ne dépend pas des angles de l’éventail.'
+                              : entry.key == 'exhibitorGap'
                               ? 'Réserve privée pour les deux rangées d’exposants, indépendante de l’allée visiteurs.'
                               : entry.key == 'parcoursWallGap'
                               ? 'Derrière une rangée simple ; l’appui autorisé reste réservé aux bords de connexion.'
@@ -1091,9 +1426,9 @@ class _HomeState extends State<Home> {
                     'Les repères aident à préparer le plan ; vérifier sur place la continuité du trajet et les espaces de manœuvre. Le logiciel ne certifie pas l’accessibilité.',
                   ),
                   TextButton(
-                    onPressed: () => openGithub(
+                    onPressed: () => openExternalLink(
                       Uri.parse(
-                        'https://www.legifrance.gouv.fr/jorf/id/JORFARTI000034485474',
+                        'https://www.legifrance.gouv.fr/loda/article_lc/LEGIARTI000034485952',
                       ),
                     ),
                     child: const Text('Repères officiels d’accessibilité'),
@@ -1159,7 +1494,14 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> eventProperties(Json event) async {
+    if (event['eventLocked'] == true) {
+      toast('Événement verrouillé : lecture seule.');
+      return;
+    }
     var activity = eventActivity(event);
+    var iconChoice = eventIconNames.contains(event['icon'])
+        ? event['icon'] as String
+        : 'Automatique';
     var mealService = mealsEnabled(event) ? 'Oui' : 'Non';
     var defaultSides = eventSeatingSides(event);
     final style = event['tableCards'] as Map? ?? {};
@@ -1171,7 +1513,7 @@ class _HomeState extends State<Home> {
     final route = DialogRoute<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
-        builder: (c, update) => AlertDialog(
+        builder: (c, update) => KeyboardDialog(
           title: const Text('Propriétés de l’événement'),
           content: SizedBox(
             width: 580,
@@ -1186,6 +1528,38 @@ class _HomeState extends State<Home> {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    key: const ValueKey('event-icon-choice'),
+                    initialValue: iconChoice,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Icône de l’événement',
+                    ),
+                    items: [
+                      for (final choice in ['Automatique', ...eventIconNames])
+                        DropdownMenuItem(
+                          value: choice,
+                          child: Row(
+                            children: [
+                              Icon(
+                                eventIconData[choice == 'Automatique'
+                                    ? defaultEventIcon(activity)
+                                    : choice],
+                                size: 20,
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                choice == 'Automatique'
+                                    ? 'Automatique (${defaultEventIcon(activity)})'
+                                    : choice,
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                    onChanged: (value) => update(() => iconChoice = value!),
+                  ),
+                  const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
                     initialValue: activity,
                     decoration: const InputDecoration(labelText: 'Activité'),
@@ -1243,6 +1617,14 @@ class _HomeState extends State<Home> {
                       'Réglage pour les nouveaux modèles de tables de cet événement. Les tables existantes gardent leurs côtés assis.',
                     ),
                   ),
+                  OutlinedButton.icon(
+                    onPressed: () => assignmentSettings(event),
+                    icon: const Icon(Icons.event_seat),
+                    label: const Text(
+                      'Attribution : sièges, stands et placement libre',
+                    ),
+                  ),
+                  const SizedBox(height: 18),
                   TextField(
                     controller: phrase,
                     maxLength: 400,
@@ -1427,6 +1809,11 @@ class _HomeState extends State<Home> {
       void apply() {
         event['name'] = name.text.trim();
         event['activity'] = activity;
+        if (iconChoice == 'Automatique') {
+          event.remove('icon');
+        } else {
+          event['icon'] = iconChoice;
+        }
         event['mealService'] = mealService;
         event['defaultSides'] = defaultSides;
         event['room'].remove('activity');
@@ -1454,11 +1841,16 @@ class _HomeState extends State<Home> {
     await pending;
     if (!mounted) return;
     setState(() {
+      savePlanView();
+      persist();
       p = event;
+      routeVisibilityOverride = null;
       selected = null;
+      selectedObjects.clear();
+      selectedTables.clear();
       undo.clear();
       redo.clear();
-      transform.value = Matrix4.identity();
+      restorePlanView();
     });
   }
 
@@ -1490,6 +1882,10 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> newRoom() async {
+    if (planReadOnly) {
+      toast('Plan verrouillé.');
+      return;
+    }
     final initial = newProject('Salle')['room'] as Json;
     final room = await roomForm(initial, 'Créer la salle');
     if (room == null) return;
@@ -1516,6 +1912,10 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> roomEdit() async {
+    if (planReadOnly) {
+      toast('Plan verrouillé.');
+      return;
+    }
     final r = await roomForm(p!['room'], 'Salle • mesures');
     if (r != null) {
       try {
@@ -1541,34 +1941,79 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> typeEdit([Json? type]) async {
+    if (planReadOnly) {
+      toast('Plan verrouillé.');
+      return;
+    }
     final old = type;
+    String category(dynamic shape) => switch (shape) {
+      'banc' => 'Banc',
+      'chaise' => 'Chaise',
+      'chaise enfant' => 'Chaise enfant',
+      'emplacement PMR' => 'Emplacement PMR',
+      _ => 'Table',
+    };
+    final defaults = <String, Json>{
+      'Table': {
+        'name': 'Nouvelle table',
+        'w': 1.8,
+        'h': .8,
+        'shape': 'rectangle',
+      },
+      'Banc': {'name': 'Nouveau banc', 'w': 2.0, 'h': .4, 'shape': 'banc'},
+      'Chaise': {
+        'name': 'Nouvelle chaise',
+        'w': .5,
+        'h': .5,
+        'shape': 'chaise',
+      },
+      'Chaise enfant': {
+        'name': 'Nouvelle chaise enfant',
+        'w': number(eventComfort(p!)['childChairWidth']),
+        'h': number(eventComfort(p!)['childChairDepth']),
+        'shape': 'chaise enfant',
+      },
+      'Emplacement PMR': {
+        'name': 'Nouvel emplacement PMR',
+        'w': number(eventComfort(p!)['pmrSeatWidth']),
+        'h': number(eventComfort(p!)['pmrDepth']),
+        'shape': 'emplacement PMR',
+      },
+    };
     final t = await form(
       'Type de mobilier',
       joinGapFormValues(
-        type ??
-            {
-              'id': uid(),
-              'name': 'Nouvelle table',
-              'shape': 'rectangle',
-              'w': 1.8,
-              'h': .8,
-              'capacity': eventSeatingSides(p!) == 'Un côté' ? 3 : 6,
-              'sides': eventSeatingSides(p!),
-              'seatSide': 'Bas',
-              'quantity': 10,
-              'limit': 10,
-              'source': 'Propre',
-              'enabled': true,
-              'seating': 'Chaises',
-            },
+        type != null
+            ? {...type, '_furnitureKind': category(type['shape'])}
+            : {
+                '_furnitureKind': 'Table',
+                'id': uid(),
+                'name': 'Nouvelle table',
+                'shape': 'rectangle',
+                'w': 1.8,
+                'h': .8,
+                'capacity': eventSeatingSides(p!) == 'Un côté' ? 3 : 6,
+                'sides': eventSeatingSides(p!),
+                'seatSide': 'Bas',
+                'quantity': 10,
+                'limit': 10,
+                'source': 'Propre',
+                'enabled': true,
+                'seating': 'Chaises',
+                'usage': eventAssignmentMode(p!) == assignmentModes[1]
+                    ? furnitureUses[1]
+                    : furnitureUses.first,
+              },
       ),
       {
+        '_furnitureKind': 'Catégorie de mobilier',
         'name': 'Nom du type',
         '_joinGapMode':
             'Jonctions : hériter du réglage général ou personnaliser',
         '_joinGapM': 'Espacement de jonction (m, 0 = contact)',
         '_joinGapSides': 'Bords concernés (suivent la rotation)',
-        'shape': 'Forme',
+        'shape': 'Forme de la table',
+        'usage': 'Usage des nouvelles pièces',
         'w': 'Longueur ou diamètre (m)',
         'h': 'Largeur (m), ignorée pour cercle/carré',
         'capacity': 'Capacité par défaut (0 = service)',
@@ -1579,10 +2024,46 @@ class _HomeState extends State<Home> {
         'source': 'Provenance',
         'seating': 'Assises',
       },
+      radioChoices: {'_furnitureKind'},
+      fieldLabel: (values, key, label) => values['_furnitureKind'] == 'Table'
+          ? label
+          : key == 'w'
+          ? (values['_furnitureKind'] == 'Banc'
+                ? 'Longueur du banc (m)'
+                : 'Largeur (m)')
+          : key == 'h'
+          ? 'Profondeur (m)'
+          : label,
+      onChoiceChanged: (values, key) {
+        if (key != '_furnitureKind') return;
+        final d = defaults[values[key]]!;
+        if (defaults.values.any((v) => v['name'] == values['name'])) {
+          values['name'] = d['name'];
+        }
+        values['shape'] = d['shape'];
+        values['w'] = d['w'];
+        values['h'] = d['h'];
+        if (values[key] != 'Table') values['usage'] = furnitureUses.first;
+      },
+      fieldVisible: (values, key) =>
+          values['_furnitureKind'] == 'Table' ||
+          ![
+            'shape',
+            'usage',
+            'capacity',
+            'sides',
+            'seatSide',
+            'seating',
+            '_joinGapMode',
+            '_joinGapM',
+            '_joinGapSides',
+          ].contains(key),
       choices: {
         '_joinGapMode': ['Hériter', 'Personnaliser'],
         '_joinGapSides': joinGapSideNames,
-        'shape': ['rectangle', 'carré', 'cercle', 'banc'],
+        '_furnitureKind': defaults.keys.toList(),
+        'shape': ['rectangle', 'carré', 'cercle'],
+        'usage': furnitureUses,
         'source': ['Propre', 'Salle', 'Emprunté'],
         'seating': ['Chaises', 'Bancs', 'Mixte'],
         'sides': seatingModes,
@@ -1592,6 +2073,27 @@ class _HomeState extends State<Home> {
       integer: {'capacity', 'quantity', 'limit'},
     );
     if (t == null) return;
+    t.remove('_furnitureKind');
+    if ([
+      'chaise',
+      'chaise enfant',
+      'emplacement PMR',
+      'banc',
+    ].contains(t['shape'])) {
+      t['usage'] = furnitureUses.first;
+      if (['chaise', 'chaise enfant'].contains(t['shape'])) {
+        t['capacity'] = 1;
+        if (old == null && number(t['w']) == 1.8 && number(t['h']) == .8) {
+          t['w'] = .5;
+          t['h'] = .5;
+        }
+      }
+      if (t['shape'] == 'emplacement PMR') {
+        t['capacity'] = 1;
+        t['w'] = number(eventComfort(p!)['pmrSeatWidth']);
+        t['h'] = number(eventComfort(p!)['pmrDepth']);
+      }
+    }
     saveJoinGapForm(t);
     if (t['limit'] > t['quantity']) {
       toast('La limite ne peut pas dépasser le stock.');
@@ -1615,7 +2117,7 @@ class _HomeState extends State<Home> {
     if (old != null &&
         await confirm(
           'Propager aux instances ?',
-          'Mettre à jour assises et capacités, ainsi que les dimensions si elles ont changé ? Positions et orientations conservées. Les attributions seront contrôlées.',
+          'Mettre à jour l’usage, les assises et les capacités, ainsi que les dimensions si elles ont changé ? Positions et orientations conservées. Les attributions incompatibles avec le nouvel usage seront retirées.',
         )) {
       var resized = false;
       change(() => resized = propagateFurniture(p!, old, t));
@@ -1637,10 +2139,16 @@ class _HomeState extends State<Home> {
   }
 
   void addTable(Json t) => addTables([t]);
-  void addTables(List<Json> types, {bool all = false}) {
+  void addTables(List<Json> types, {bool all = false, int? requestedCount}) {
+    if (planReadOnly) return;
     late AddResult result;
     change(() {
-      result = addFurniture(p!, types, all: all);
+      result = addFurniture(
+        p!,
+        types,
+        all: all,
+        requestedCount: requestedCount,
+      );
       p!['lastFurnitureAdd'] = {
         'placed': result.placed,
         'remaining': result.remaining,
@@ -1655,15 +2163,49 @@ class _HomeState extends State<Home> {
     );
   }
 
-  void assignGroups() {
+  Future<void> assignGroups() async {
+    final bookings = rows(
+      p!,
+      'groups',
+    ).where((g) => g['waiting'] != true).toList();
+    if (bookings.isNotEmpty &&
+        bookings.every(isStandBooking) &&
+        !tables(p!).any((t) => furnitureUse(t) == furnitureUses[1])) {
+      final available = tables(p!)
+          .where(
+            (t) =>
+                t['kind'] == 'table' &&
+                furnitureUse(t) == furnitureUses.first &&
+                occupancy(p!, t['id']) == 0 &&
+                !tableOutsideRoom(p!, t),
+          )
+          .toList();
+      if (available.isNotEmpty) {
+        if (!await confirm(
+          'Utiliser ces tables pour les stands ?',
+          'Les réservations demandent des stands, mais les tables du plan sont encore en places assises. Passer ${available.length} table(s) libres en Stand / exposition : ${available.map((t) => t['label']).join(', ')} ? Les positions et rotations seront conservées.',
+        )) {
+          return;
+        }
+        if (!mounted) return;
+        change(
+          () => changeFurnitureUsage(
+            p!,
+            available.map((t) => t['id'] as String).toSet(),
+            furnitureUses[1],
+          ),
+        );
+      }
+    }
+    if (!mounted) return;
     change(() => allocate(p!));
     final summary = allocationSummary(p!);
     showDialog<void>(
       context: context,
-      builder: (c) => AlertDialog(
+      builder: (c) => KeyboardDialog(
         title: const Text('Attribution des groupes'),
         content: Text(
-          '${summary['assigned']} / ${summary['requested']} personnes attribuées.\n${summary['remaining']} encore sans attribution.\n${(summary['excluded'] as List).isEmpty ? 'Toutes les tables passent les contrôles géométriques disponibles.' : 'Tables écartées pour conflits ou passage insuffisant : ${(summary['excluded'] as List).join(', ')}. Corriger le plan ou utiliser Disposer tables puis relancer.'}\nLes attributions verrouillées sont conservées. Vérifier les besoins dans Contrôles.',
+          '${rows(p!, 'groups').any(isStandBooking) ? '${standSummaryLabel(p!)}\n${standAllocationWarnings(p!).join('\n')}\n' : ''}${freeSeating(p!) ? 'Placement libre : aucune attribution automatique des places assises.\n' : ''}${rows(p!, 'groups').any((g) => !isStandBooking(g)) ? '${summary['assigned']} / ${summary['requested']} personnes attribuées.\n${summary['remaining']} encore sans attribution.\n' : ''}${(summary['excluded'] as List).isEmpty ? 'Toutes les tables passent les contrôles géométriques disponibles.' : 'Tables écartées pour conflits ou passage insuffisant : ${(summary['excluded'] as List).join(', ')}. Corriger le plan ou utiliser Disposer mobilier puis relancer.'}\nLes attributions verrouillées sont conservées. Vérifier les besoins dans Contrôles.',
         ),
         actions: [
           TextButton(
@@ -1686,7 +2228,7 @@ class _HomeState extends State<Home> {
     final result = await showDialog<Json>(
       context: context,
       builder: (c) => StatefulBuilder(
-        builder: (c, update) => AlertDialog(
+        builder: (c, update) => KeyboardDialog(
           title: const Text('Objectif de personnes de l’événement'),
           content: SizedBox(
             width: 520,
@@ -1819,6 +2361,11 @@ class _HomeState extends State<Home> {
             ),
           ),
         ),
+        if (rows(p!, 'groups').any(isStandBooking))
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(standSummaryLabel(p!)),
+          ),
       ],
     ),
   );
@@ -1910,13 +2457,22 @@ class _HomeState extends State<Home> {
       ),
     ),
   );
-  Future<void> addObject() async {
+  Future<void> addObject([String kind = 'obstacle']) async {
+    if (kind == 'image') {
+      await imageEditor();
+      return;
+    }
+    if (['info', 'text', 'arrow'].contains(kind)) {
+      await annotationEditor(kind);
+      return;
+    }
+    if (planReadOnly) return;
     final v = await form(
       'Ajouter au plan',
       {
         'id': uid(),
-        'kind': 'obstacle',
-        'label': 'Obstacle',
+        'kind': kind,
+        'label': objectLabels[kind] ?? 'Obstacle',
         'shape': 'rectangle',
         'x': 1.0,
         'y': 1.0,
@@ -1952,10 +2508,29 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> itemEdit(Json t) async {
+    if (planReadOnly) {
+      toast('Plan verrouillé.');
+      return;
+    }
+    if (t['kind'] == 'image') {
+      await imageEditor(t);
+      return;
+    }
+    if (isPlanAnnotation(t)) {
+      await annotationEditor(t['kind'], t);
+      return;
+    }
+    if (isSeatingFurniture(t) && t['kind'] != 'table') {
+      await seatFurnitureEdit(t);
+      return;
+    }
     final v = await form(
       'Modifier ${t['label']}',
       {
         ...t,
+        if (t['kind'] == 'table') 'usage': furnitureUse(t),
+        if (t['kind'] == 'table')
+          'numberLocked': t['numberLocked'] == true ? 'Oui' : 'Non',
         if (isPlanAccess(t))
           'accessAudience': t['accessAudience'] ?? accessAudiences.first,
         if (canIncludeInProximity(t))
@@ -1991,6 +2566,8 @@ class _HomeState extends State<Home> {
             'parcoursPassage': 'Traversable par les visiteurs (allée)',
         },
         if (t['kind'] == 'table') ...{
+          'usage': 'Usage',
+          'numberLocked': 'Conserver ce numéro lors d’une renumérotation',
           'note': 'Note d’organisation (interne)',
           '_joinGapMode': 'Jonctions : hériter du type ou personnaliser',
           '_joinGapM': 'Espacement de jonction (m, 0 = contact)',
@@ -2004,6 +2581,15 @@ class _HomeState extends State<Home> {
         },
         if (t['kind'] == 'door') 'opening': 'Sens ouverture (indicatif)',
       },
+      extraContent:
+          t['kind'] == 'table' && furnitureUse(t) == furnitureUses.first
+          ? TextButton(
+              onPressed: () =>
+                  Navigator.of(context)
+                      .pop(<String, dynamic>{'_seatEditor': true}),
+              child: const Text('Places numérotées et réservées'),
+            )
+          : null,
       numeric: {'w', 'h', if (t['kind'] == 'table') '_joinGapM'},
       integer: {if (t['kind'] == 'table') 'capacity'},
       choices: {
@@ -2019,6 +2605,8 @@ class _HomeState extends State<Home> {
           if (parcoursAvailable(p!)) 'parcoursAccess': parcoursZoneAccess,
           if (parcoursAvailable(p!)) 'parcoursPassage': ['Non', 'Oui'],
         },
+        if (t['kind'] == 'table') 'usage': furnitureUses,
+        if (t['kind'] == 'table') 'numberLocked': ['Non', 'Oui'],
         if (t['kind'] == 'table') 'seating': ['Chaises', 'Bancs', 'Mixte'],
         if (t['kind'] == 'table') 'sides': seatingModes,
         if (t['kind'] == 'table') 'seatSide': seatingSideNames,
@@ -2031,8 +2619,15 @@ class _HomeState extends State<Home> {
           ],
       },
     );
+    if (v?['_seatEditor'] == true) {
+      await numberedSeatsEdit(t);
+      return;
+    }
     if (v != null) {
-      if (t['kind'] == 'table') saveJoinGapForm(v);
+      if (t['kind'] == 'table') {
+        saveJoinGapForm(v);
+        v['numberLocked'] = v['numberLocked'] == 'Oui';
+      }
       for (final k in ['x', 'y']) {
         final n = double.tryParse('${v[k]}'.replaceAll(',', '.'));
         if (n == null || !n.isFinite || n < 0) {
@@ -2043,9 +2638,20 @@ class _HomeState extends State<Home> {
       }
       if (['cercle', 'carré'].contains(v['shape'])) v['h'] = v['w'];
       final applyGap = v.remove('_applyJoinGapNow') == 'Oui';
+      if (v['capacity'] != 0 &&
+          furnitureUse(t) != furnitureUse(v) &&
+          !await confirm(
+            'Changer l’usage ?',
+            'Les attributions de cette pièce seront retirées. Les réservations et la disposition restent conservées.',
+          )) {
+        return;
+      }
       final before = clone(p!);
       String? result;
       change(() {
+        if (furnitureUse(t) != furnitureUse(v)) {
+          changeFurnitureUsage(p!, {t['id'] as String}, furnitureUse(v));
+        }
         rows(p!, 'items')[rows(p!, 'items').indexOf(t)] = v;
         if (applyGap && t['kind'] == 'table') {
           result = applyTableJoinGapLocally(p!, before, v['id'] as String);
@@ -2057,42 +2663,138 @@ class _HomeState extends State<Home> {
 
   Future<void> groupEdit([Json? g]) async {
     final v = await form(
-      'Réservation de groupe',
-      g ??
-          {
-            'id': uid(),
-            'name': '',
-            'count': 4,
-            'meal': 'Normal',
-            'allergy': '',
-            'needs': '',
-            'companion': 'Non',
-            'alloc': <Json>[],
-            'locked': false,
-            'reserved': '',
-          },
+      'Réservation',
       {
-        'name': 'Référent (prénom possible)',
-        'count': 'Effectif',
+        'id': uid(),
+        'bookingKind': g == null
+            ? eventAssignmentMode(p!)
+            : g['bookingKind'] ?? assignmentModes.first,
+        'standUnit': p!['standUnit'] ?? standUnits.first,
+        'requestedTables': 1,
+        'requestedMetres': 3.0,
+        'shareTable': 'Oui',
+        'requestedType': '',
+        'contact': '',
+        'email': '',
+        'phone': '',
+        'childChairs': 0,
+        'waiting': false,
+        'standAlloc': <Json>[],
+        'name': '',
+        'count': 4,
+        'meal': 'Normal',
+        'allergy': '',
+        'needs': '',
+        'companion': 'Non',
+        'alloc': <Json>[],
+        'locked': false,
+        'reserved': '',
+        ...?g,
+      },
+      {
+        'bookingKind': 'Réservation pour',
+        'name': 'Référent / exposant',
+        'contact': 'Contact (facultatif)',
+        'email': 'Adresse e-mail (facultatif)',
+        'phone': 'Téléphone (facultatif)',
+        'standUnit': 'Demande de stand : unité',
+        'requestedTables': 'Nombre de tables demandé',
+        'requestedMetres': 'Mètres linéaires demandés',
+        'requestedType': 'Modèle de table souhaité',
+        'shareTable': 'Partager une table en mode métrage',
+        'count': 'Nombre de personnes',
+        'childChairs':
+            'Chaises enfant (stock encore disponible : ${max(0, childChairStock(p!) - reservedChildChairs(p!, exceptId: g?['id']))})',
         if (mealsEnabled(p!)) 'meal': 'Repas par défaut',
-        'allergy': 'Allergies (complément)',
+        if (mealsEnabled(p!)) 'allergy': 'Allergies (complément)',
         'needs': 'Besoin de mobilité',
         'companion': 'Accompagnant proche',
         'note': 'Note d’organisation (interne)',
       },
+      fieldVisible: (values, key) {
+        final stand = values['bookingKind'] == assignmentModes[1];
+        if ([
+          'standUnit',
+          'requestedTables',
+          'requestedMetres',
+          'requestedType',
+          'shareTable',
+        ].contains(key)) {
+          return stand &&
+              (key != 'requestedTables' || values['standUnit'] == 'Tables') &&
+              (key != 'requestedMetres' && key != 'shareTable' ||
+                  values['standUnit'] == 'Mètres linéaires');
+        }
+        if (['meal', 'allergy'].contains(key)) {
+          return !stand && mealsEnabled(p!);
+        }
+        return true;
+      },
+      choiceLabels: {
+        for (final t in rows(p!, 'types'))
+          t['id'] as String: t['name'] as String,
+      },
       choices: {
         if (mealsEnabled(p!)) 'meal': List<String>.from(p!['meals']),
+        'bookingKind': assignmentModes,
+        'standUnit': standUnits,
+        'shareTable': ['Oui', 'Non'],
+        'requestedType': [
+          '',
+          ...rows(p!, 'types')
+              .where(
+                (t) => ![
+                  'banc',
+                  'chaise',
+                  'chaise enfant',
+                  'emplacement PMR',
+                ].contains(t['shape']),
+              )
+              .map((t) => t['id'] as String),
+        ],
         'needs': ['', 'Fauteuil', 'Autre mobilité'],
         'companion': ['Non', 'Oui'],
       },
-      integer: {'count'},
+      validate: (values) => childChairReservationError(p!, values),
+      integer: {'count', 'requestedTables', 'childChairs'},
+      numeric: {'requestedMetres'},
     );
     if (v != null) {
+      final childError = childChairReservationError(p!, v);
+      if (childError != null) {
+        toast(childError);
+        return;
+      }
+      final duplicates = similarReservations(p!, v);
+      if (duplicates.isNotEmpty &&
+          !await confirm(
+            'Réservation similaire',
+            'Une réservation porte le même nom ou contact : ${duplicates.map((g) => g['name']).join(', ')}. Conserver cette réservation distincte ?',
+          )) {
+        return;
+      }
+      if (g != null &&
+          (g['bookingKind'] ?? assignmentModes.first) != v['bookingKind'] &&
+          !await confirm(
+            'Changer le mode de réservation ?',
+            'Les attributions de cette réservation seront retirées. Identités et préférences sont conservées.',
+          )) {
+        return;
+      }
       final previousCount = g?['count'] as int?;
       change(() {
         if (g == null) {
           rows(p!, 'groups').add(v);
         } else {
+          if ((g['bookingKind'] ?? assignmentModes.first) !=
+              (v['bookingKind'] ?? assignmentModes.first)) {
+            v['alloc'] = <Json>[];
+            v['standAlloc'] = <Json>[];
+            for (final seat in (v['seats'] as List? ?? [])) {
+              seat.remove('table');
+              seat.remove('slot');
+            }
+          }
           resizeReservation(v, v['count'], previousCount: g['count']);
           rows(p!, 'groups')[rows(p!, 'groups').indexOf(g)] = v;
         }
@@ -2120,7 +2822,7 @@ class _HomeState extends State<Home> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
-        builder: (c, update) => AlertDialog(
+        builder: (c, update) => KeyboardDialog(
           title: Text('Proximité de ${group['name']}'),
           content: SizedBox(
             width: 520,
@@ -2252,6 +2954,14 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> allocationEdit(Json g) async {
+    if (g['waiting'] == true) {
+      toast('Confirmer la réservation avant de l’attribuer.');
+      return;
+    }
+    if (isStandBooking(g)) {
+      await standAllocationEdit(g);
+      return;
+    }
     final ts = tables(p!);
     final counts = {
       for (final t in ts)
@@ -2267,7 +2977,7 @@ class _HomeState extends State<Home> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
-        builder: (c, update) => AlertDialog(
+        builder: (c, update) => KeyboardDialog(
           title: Text('Tables de ${g['name']}'),
           content: SizedBox(
             width: 470,
@@ -2411,7 +3121,7 @@ class _HomeState extends State<Home> {
       builder: (c) => StatefulBuilder(
         builder: (c, update) {
           final capacity = effectiveCapacity(p!, draft);
-          return AlertDialog(
+          return KeyboardDialog(
             title: Text('Places adaptées • ${table['label']}'),
             content: SizedBox(
               width: 520,
@@ -2568,7 +3278,7 @@ class _HomeState extends State<Home> {
     final accepted = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
-        builder: (c, update) => AlertDialog(
+        builder: (c, update) => KeyboardDialog(
           title: const Text('Exporter en CSV'),
           content: SizedBox(
             width: 360,
@@ -2577,6 +3287,7 @@ class _HomeState extends State<Home> {
               decoration: const InputDecoration(labelText: 'Contenu'),
               items: [
                 'Réservations',
+                'Liste d’attente',
                 'Attributions',
                 if (mealsEnabled(p!)) 'Totaux des repas',
               ].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
@@ -2631,11 +3342,13 @@ class _HomeState extends State<Home> {
       g['count'],
       (i) => i < (g['seats'] as List? ?? []).length
           ? clone(g['seats'][i])
+          : !mealsEnabled(p!)
+          ? individualSeat(g, i)
           : {
               'number': i + 1,
               'meal': g['meal'],
               'need': '',
-              'allergy': '',
+              'allergy': mealsEnabled(p!) ? '' : g['allergy'] ?? '',
               'companion': '',
             },
     );
@@ -2645,7 +3358,7 @@ class _HomeState extends State<Home> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
-        builder: (c, update) => AlertDialog(
+        builder: (c, update) => KeyboardDialog(
           title: Text('Personnes et places • ${g['name']}'),
           content: SizedBox(
             width: 720,
@@ -2695,7 +3408,7 @@ class _HomeState extends State<Home> {
                                     }
                                     if (await confirm(
                                       'Retirer la place anonyme ${i + 1} ?',
-                                      'L’effectif de ce groupe passera de ${draft['count']} à ${(draft['count'] as int) - 1}. Repas et besoins de cette place retirés, liens d’accompagnant renumérotés. La modification reste annulable tant que vous ne cliquez pas Enregistrer.',
+                                      'L’effectif de ce groupe passera de ${draft['count']} à ${(draft['count'] as int) - 1}. Préférences de cette place retirées, liens d’accompagnant renumérotés. La modification reste annulable tant que vous ne cliquez pas Enregistrer.',
                                     )) {
                                       if (!c.mounted) return;
                                       update(() {
@@ -2866,15 +3579,16 @@ class _HomeState extends State<Home> {
                             const SizedBox(height: 8),
                             Row(
                               children: [
-                                Expanded(
-                                  child: TextFormField(
-                                    initialValue: s['allergy'],
-                                    onChanged: (v) => s['allergy'] = v,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Allergies',
+                                if (mealsEnabled(p!))
+                                  Expanded(
+                                    child: TextFormField(
+                                      initialValue: s['allergy'],
+                                      onChanged: (v) => s['allergy'] = v,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Allergies',
+                                      ),
                                     ),
                                   ),
-                                ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: TextFormField(
@@ -2956,7 +3670,7 @@ class _HomeState extends State<Home> {
     final accepted = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
-        builder: (c, update) => AlertDialog(
+        builder: (c, update) => KeyboardDialog(
           title: const Text('Origine du contenu à importer'),
           content: SizedBox(
             width: 520,
@@ -3018,7 +3732,7 @@ class _HomeState extends State<Home> {
     final accepted = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
-        builder: (c, update) => AlertDialog(
+        builder: (c, update) => KeyboardDialog(
           title: Text('Éléments en commun (${plan.conflicts.length})'),
           content: SizedBox(
             width: 600,
@@ -3124,7 +3838,7 @@ class _HomeState extends State<Home> {
     return showDialog<List<Json>>(
       context: context,
       builder: (c) => StatefulBuilder(
-        builder: (c, update) => AlertDialog(
+        builder: (c, update) => KeyboardDialog(
           title: Text(
             importing ? 'Événements à importer' : 'Événements à sauvegarder',
           ),
@@ -3192,7 +3906,7 @@ class _HomeState extends State<Home> {
       barrierDismissible: false,
       builder: (_) => const PopScope(
         canPop: false,
-        child: AlertDialog(
+        child: KeyboardDialog(
           title: Text('Import en cours'),
           content: SizedBox(
             height: 60,
@@ -3213,8 +3927,12 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> fileAction(String action) async {
+    if (action == 'Importer projet' && eventReadOnly) {
+      toast('Déverrouiller l’événement avant un import.');
+      return;
+    }
     final isPdf = action == 'Export PDF';
-    final exportPlaceLabels = showPlaceLabels;
+    var exportPlaceLabels = showPlaceLabels;
     final snapshot = action == 'Importer projet' ? null : clone(p!);
     final atClick = DateTime.now();
     final reference = uid();
@@ -3230,6 +3948,10 @@ class _HomeState extends State<Home> {
     if (!mounted) return;
     var includePlan = true, includeSummary = true, includeCards = true;
     var includeReception = false, includeService = false;
+    var includeWaiting = false;
+    var includeLegend = true;
+    var planAudience = 'Organisation';
+    var planColumns = 1, planRows = 1;
     if (isPdf) {
       final occupied = tables(snapshot!)
           .any((t) => occupancy(snapshot, t['id']) > 0);
@@ -3237,7 +3959,7 @@ class _HomeState extends State<Home> {
       final accepted = await showDialog<bool>(
         context: context,
         builder: (c) => StatefulBuilder(
-          builder: (c, update) => AlertDialog(
+          builder: (c, update) => KeyboardDialog(
             title: const Text('Export PDF'),
             content: SizedBox(
               width: 480,
@@ -3248,11 +3970,83 @@ class _HomeState extends State<Home> {
                     const Text(
                       'Choisissez les éléments à réunir dans un seul PDF.',
                     ),
+                    DropdownButtonFormField<String>(
+                      initialValue: planAudience,
+                      decoration: const InputDecoration(
+                        labelText: 'Réglages pour le destinataire du plan',
+                      ),
+                      items: [
+                        for (final v in [
+                          'Organisation',
+                          'Visiteurs',
+                          'Exposants',
+                        ])
+                          DropdownMenuItem(value: v, child: Text(v)),
+                      ],
+                      onChanged: (value) => update(() {
+                        planAudience = value!;
+                        includePlan = true;
+                        includeSummary = planAudience == 'Organisation';
+                        includeCards =
+                            planAudience == 'Organisation' && occupied;
+                        includeWaiting = false;
+                        includeReception = false;
+                        includeService = false;
+                        exportPlaceLabels =
+                            planAudience == 'Organisation' && showPlaceLabels;
+                      }),
+                    ),
                     CheckboxListTile(
                       title: const Text('Plan de salle'),
                       value: includePlan,
                       onChanged: (value) => update(() => includePlan = value!),
                     ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 24),
+                      child: CheckboxListTile(
+                        title: const Text('Afficher la légende sur le plan'),
+                        value: includeLegend,
+                        onChanged: includePlan
+                            ? (value) => update(() => includeLegend = value!)
+                            : null,
+                      ),
+                    ),
+                    if (includePlan)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<int>(
+                              initialValue: planColumns,
+                              decoration: const InputDecoration(
+                                labelText: 'Feuilles en largeur',
+                              ),
+                              items: [
+                                for (var n = 1; n <= 6; n++)
+                                  DropdownMenuItem(value: n, child: Text('$n')),
+                              ],
+                              onChanged: (v) => update(() => planColumns = v!),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: DropdownButtonFormField<int>(
+                              initialValue: planRows,
+                              decoration: const InputDecoration(
+                                labelText: 'Feuilles en hauteur',
+                              ),
+                              items: [
+                                for (var n = 1; n <= 6; n++)
+                                  DropdownMenuItem(value: n, child: Text('$n')),
+                              ],
+                              onChanged: (v) => update(() => planRows = v!),
+                            ),
+                          ),
+                        ],
+                      ),
+                    if (includePlan && (planColumns > 1 || planRows > 1))
+                      Text(
+                        'Plan sur ${planColumns * planRows} pages A4, avec repères d’assemblage.',
+                      ),
                     CheckboxListTile(
                       title: const Text('Récapitulatif de l’événement'),
                       subtitle: const Text(
@@ -3284,14 +4078,24 @@ class _HomeState extends State<Home> {
                           update(() => includeReception = value!),
                     ),
                     CheckboxListTile(
-                      title: const Text('Fiche cuisine et service'),
+                      title: const Text('Liste d’attente'),
                       subtitle: const Text(
-                        'Quantités de repas, service par table, allergies et besoins particuliers',
+                        'Réservations en attente, demandes et coordonnées',
                       ),
-                      value: includeService,
+                      value: includeWaiting,
                       onChanged: (value) =>
-                          update(() => includeService = value!),
+                          update(() => includeWaiting = value!),
                     ),
+                    if (mealsEnabled(p!))
+                      CheckboxListTile(
+                        title: const Text('Fiche cuisine et service'),
+                        subtitle: const Text(
+                          'Quantités de repas, service par table, allergies et besoins particuliers',
+                        ),
+                        value: includeService,
+                        onChanged: (value) =>
+                            update(() => includeService = value!),
+                      ),
                   ],
                 ),
               ),
@@ -3307,6 +4111,7 @@ class _HomeState extends State<Home> {
                         includeSummary ||
                         includeCards ||
                         includeReception ||
+                        includeWaiting ||
                         includeService
                     ? () => Navigator.pop(c, true)
                     : null,
@@ -3348,7 +4153,7 @@ class _HomeState extends State<Home> {
         final mode = await showDialog<bool>(
           context: context,
           builder: (c) => StatefulBuilder(
-            builder: (c, update) => AlertDialog(
+            builder: (c, update) => KeyboardDialog(
               title: const Text('Contenu à importer'),
               content: SizedBox(
                 width: 540,
@@ -3510,12 +4315,17 @@ class _HomeState extends State<Home> {
             includeCards: includeCards,
             includeReception: includeReception,
             includeService: includeService,
+            includeWaiting: includeWaiting,
             includePlaceLabels: exportPlaceLabels,
+            includeLegend: includeLegend,
+            planAudience: planAudience,
+            planColumns: planColumns,
+            planRows: planRows,
           );
           if (!mounted) return;
           await showDialog<void>(
             context: context,
-            builder: (c) => AlertDialog(
+            builder: (c) => KeyboardDialog(
               title: const Text('PDF exporté'),
               content: SizedBox(
                 width: 650,
@@ -3565,7 +4375,7 @@ class _HomeState extends State<Home> {
   Future<void> csvExample() async {
     final save = await showDialog<bool>(
       context: context,
-      builder: (c) => AlertDialog(
+      builder: (c) => KeyboardDialog(
         title: const Text('CSV d’exemple • réservations par groupe'),
         content: SizedBox(
           width: 650,
@@ -3595,7 +4405,7 @@ class _HomeState extends State<Home> {
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'Ne mange pas conserve une place, sans compter comme repas. Les valeurs CSV décrivent le groupe ; les exceptions par place anonyme et l’accompagnant se règlent après import dans Besoins et repas. Garder la première ligne d’en-tête ; aucune ligne de commentaire.',
+                  'Ne mange pas conserve une place, sans compter comme repas. Les valeurs CSV décrivent le groupe ; les exceptions par place anonyme et l’accompagnant se règlent après import dans Préférences. Garder la première ligne d’en-tête ; aucune ligne de commentaire.',
                 ),
                 const SizedBox(height: 12),
                 const Text('Modèle inclus dans l’application :'),
@@ -3648,6 +4458,7 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> csvImport() async {
+    if (eventReadOnly) return;
     final path = await ask(
       'Importer réservations CSV',
       savedCsvExample ?? bundledCsvExample,
@@ -3708,7 +4519,7 @@ class _HomeState extends State<Home> {
                     onChanged: (v) => set(v!),
                   ),
                 );
-            return AlertDialog(
+            return KeyboardDialog(
               title: const Text('Prévisualisation et mapping'),
               content: SizedBox(
                 width: 700,
@@ -3797,6 +4608,25 @@ class _HomeState extends State<Home> {
           'alloc': <Json>[],
         });
       }
+      final nearMatches = <String>{};
+      for (final incomingGroup in incoming) {
+        for (final existing
+            in (mode == 'Remplacer réservations'
+                ? <Json>[]
+                : similarReservations(p!, incomingGroup))) {
+          if ('${existing['name']}'.trim().toLowerCase() !=
+              '${incomingGroup['name']}'.trim().toLowerCase()) {
+            nearMatches.add('${incomingGroup['name']} / ${existing['name']}');
+          }
+        }
+      }
+      if (nearMatches.isNotEmpty &&
+          !await confirm(
+            'Noms similaires à l’import',
+            'Vérifier ces correspondances avant de continuer : ${nearMatches.join(', ')}. Aucun rapprochement automatique supplémentaire ne sera fait.',
+          )) {
+        return;
+      }
       final empty = rows(p!, 'groups').isEmpty;
       final plan = CsvImportPlan(
         mode == 'Remplacer réservations' ? [] : rows(p!, 'groups'),
@@ -3832,7 +4662,7 @@ class _HomeState extends State<Home> {
       final ok = await showDialog<bool>(
         context: context,
         builder: (c) => StatefulBuilder(
-          builder: (c, update) => AlertDialog(
+          builder: (c, update) => KeyboardDialog(
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -3959,8 +4789,131 @@ class _HomeState extends State<Home> {
     }
   }
 
+  Future<void> reorderEvents(int oldIndex, int newIndex) async {
+    if (reorderingEvents) return;
+    final before = [...projects];
+    if (newIndex == oldIndex) return;
+    setState(() {
+      reorderingEvents = true;
+      projects.insert(newIndex, projects.removeAt(oldIndex));
+    });
+    try {
+      await widget.store.saveEventOrder(
+        projects.map((e) => e['id'] as String).toList(),
+      );
+    } catch (_) {
+      if (mounted) {
+        setState(() => projects = before);
+        toast('Impossible d’enregistrer l’ordre des événements.');
+      }
+    } finally {
+      if (mounted) setState(() => reorderingEvents = false);
+    }
+  }
+
+  Future<void> removePlanSelection({Set<String>? itemIds}) async {
+    if (p == null || page != 0 || removingSelection || arranging) return;
+    final ids = itemIds ?? {...selectedObjects, ...selectedTables, ?selected};
+    final removable = rows(p!, 'items')
+        .where((i) => ids.contains(i['id']) && i['fixed'] != true)
+        .map((i) => i['id'])
+        .toSet();
+    if (removable.isEmpty) return;
+    removingSelection = true;
+    try {
+      change(() {
+        rows(p!, 'items').removeWhere((i) => removable.contains(i['id']));
+        prunePlacePreferences(p!);
+        for (final g in rows(p!, 'groups')) {
+          (g['standAlloc'] as List?)?.removeWhere(
+            (a) => removable.contains(a['table']),
+          );
+          (g['alloc'] as List).removeWhere(
+            (a) => removable.contains(a['table']),
+          );
+          if (removable.contains(g['reserved'])) g['reserved'] = '';
+          for (final seat in (g['seats'] as List? ?? [])) {
+            if (removable.contains(seat['table'])) {
+              seat.remove('table');
+              seat.remove('slot');
+            }
+          }
+        }
+        selectedTables.removeAll(removable);
+        selectedObjects.removeAll(removable);
+        if (removable.contains(selected)) selected = null;
+      });
+    } finally {
+      removingSelection = false;
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => Focus(
+    autofocus: true,
+    onKeyEvent: (_, event) {
+      if (eventReadOnly && event.logicalKey != LogicalKeyboardKey.escape) {
+        return KeyEventResult.ignored;
+      }
+      if (planReadOnly &&
+          event.logicalKey == LogicalKeyboardKey.delete &&
+          page == 0) {
+        return KeyEventResult.handled;
+      }
+      final focusContext = FocusManager.instance.primaryFocus?.context;
+      if (event is KeyDownEvent &&
+          page == 0 &&
+          !planReadOnly &&
+          ModalRoute.of(context)?.isCurrent == true &&
+          focusContext?.findAncestorStateOfType<EditableTextState>() == null &&
+          [
+            LogicalKeyboardKey.arrowLeft,
+            LogicalKeyboardKey.arrowRight,
+            LogicalKeyboardKey.arrowUp,
+            LogicalKeyboardKey.arrowDown,
+          ].contains(event.logicalKey)) {
+        final ids = selectedPlanIds();
+        if (ids.isNotEmpty) {
+          final step = HardwareKeyboard.instance.isShiftPressed ? .1 : .01;
+          final dx = event.logicalKey == LogicalKeyboardKey.arrowLeft
+              ? -step
+              : event.logicalKey == LogicalKeyboardKey.arrowRight
+              ? step
+              : 0.0;
+          final dy = event.logicalKey == LogicalKeyboardKey.arrowUp
+              ? -step
+              : event.logicalKey == LogicalKeyboardKey.arrowDown
+              ? step
+              : 0.0;
+          runOrganizerChange(() => nudgeSelection(p!, ids, dx, dy));
+          return KeyEventResult.handled;
+        }
+      }
+
+      if (event is KeyDownEvent &&
+          event.logicalKey == LogicalKeyboardKey.escape &&
+          page == 0 &&
+          ModalRoute.of(context)?.isCurrent == true) {
+        clearPlanSelection();
+        return KeyEventResult.handled;
+      }
+      if (event is! KeyDownEvent ||
+          event.logicalKey != LogicalKeyboardKey.delete ||
+          HardwareKeyboard.instance.isControlPressed ||
+          HardwareKeyboard.instance.isAltPressed ||
+          HardwareKeyboard.instance.isMetaPressed ||
+          page != 0 ||
+          ModalRoute.of(context)?.isCurrent != true ||
+          focusContext?.findAncestorStateOfType<EditableTextState>() != null) {
+        return KeyEventResult.ignored;
+      }
+      removePlanSelection();
+      return KeyEventResult.handled;
+    },
+    child: buildContent(context),
+  );
+
+  Widget buildContent(BuildContext context) {
     if (p == null) {
       if (loaded) {
         return Scaffold(
@@ -3998,9 +4951,10 @@ class _HomeState extends State<Home> {
         body: const Center(child: CircularProgressIndicator()),
       );
     }
-    final alerts = issues(p!);
-    final geometry = PlanGeometry(p!, rows(p!, 'items'));
-    final stats = workspaceStats(p!, tableAssignments(p!, geometry));
+    final review = planReview();
+    final alerts = review.alerts;
+    final geometry = review.geometry;
+    final stats = review.stats;
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -4013,23 +4967,49 @@ class _HomeState extends State<Home> {
               child: Row(
                 children: [
                   Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: projects
-                            .map(
-                              (event) => Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                ),
-                                child: ChoiceChip(
-                                  label: Text(event['name']),
-                                  selected: event['id'] == p!['id'],
-                                  onSelected: (_) => selectEvent(event),
+                    child: SizedBox(
+                      height: 48,
+                      child: ReorderableListView.builder(
+                        key: const ValueKey('event-tabs'),
+                        scrollDirection: Axis.horizontal,
+                        buildDefaultDragHandles: false,
+                        itemCount: projects.length,
+                        onReorderItem: reorderEvents,
+                        proxyDecorator: (child, index, animation) => Material(
+                          color: Colors.transparent,
+                          elevation: 4,
+                          child: child,
+                        ),
+                        itemBuilder: (context, index) {
+                          final event = projects[index];
+                          return ReorderableDragStartListener(
+                            key: ValueKey('event-tab-${event['id']}'),
+                            index: index,
+                            enabled: !reorderingEvents,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
+                              child: Center(
+                                child: Tooltip(
+                                  message:
+                                      'Glisser pour réorganiser les événements',
+                                  child: ChoiceChip(
+                                    avatar: Icon(
+                                      eventIcon(event),
+                                      size: 18,
+                                      semanticLabel: eventIconName(event),
+                                    ),
+                                    showCheckmark: false,
+                                    label: Text(event['name']),
+                                    selected: event['id'] == p!['id'],
+                                    onSelected: (_) => selectEvent(event),
+                                  ),
                                 ),
                               ),
-                            )
-                            .toList(),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ),
@@ -4046,7 +5026,11 @@ class _HomeState extends State<Home> {
         actions: [
           IconButton(
             tooltip: 'Annuler',
-            onPressed: undo.isEmpty
+            onPressed:
+                undo.isEmpty ||
+                    eventReadOnly ||
+                    (planReadOnly &&
+                        protectedPlan(undo.last) != protectedPlan(p!))
                 ? null
                 : () {
                     redo.add(clone(p!));
@@ -4061,7 +5045,11 @@ class _HomeState extends State<Home> {
           ),
           IconButton(
             tooltip: 'Rétablir',
-            onPressed: redo.isEmpty
+            onPressed:
+                redo.isEmpty ||
+                    eventReadOnly ||
+                    (planReadOnly &&
+                        protectedPlan(redo.last) != protectedPlan(p!))
                 ? null
                 : () {
                     undo.add(clone(p!));
@@ -4092,6 +5080,14 @@ class _HomeState extends State<Home> {
               padding: EdgeInsets.all(16),
               child: Text('Fichiers ▾'),
             ),
+          ),
+          IconButton(
+            key: const ValueKey('event-lock'),
+            tooltip: eventReadOnly
+                ? 'Déverrouiller l’événement'
+                : 'Verrouiller l’événement — lecture seule',
+            onPressed: () => toggleEventLock(p!),
+            icon: Icon(eventReadOnly ? Icons.lock : Icons.lock_open),
           ),
           themeButton(),
         ],
@@ -4157,16 +5153,33 @@ class _HomeState extends State<Home> {
           Expanded(
             child: Column(
               children: [
+                if (eventReadOnly || planReadOnly)
+                  Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: Text(
+                      eventReadOnly ? 'Événement verrouillé — lecture seule' : 'Plan verrouillé — réservations et assignations modifiables',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
                 workspaceCounters(stats),
                 Expanded(
-                  child: switch (page) {
-                    0 => plan(),
-                    1 => inventory(),
-                    2 => reservations(reservationPreferenceChecks(p!)),
-                    3 => controls(alerts),
-                    5 => attributions(),
-                    _ => events(),
-                  },
+                  child: ExcludeFocus(
+                    excluding: eventReadOnly && [1, 2, 5].contains(page),
+                    child: AbsorbPointer(
+                      absorbing: eventReadOnly && [1, 2, 5].contains(page),
+                      child: switch (page) {
+                        0 => plan(),
+                        1 => inventory(),
+                        2 => reservations(reservationPreferenceChecks(p!)),
+                        3 => controls(alerts),
+                        5 => attributions(),
+                        _ => events(),
+                      },
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -4193,16 +5206,22 @@ class _HomeState extends State<Home> {
                     'items',
                   ).where((item) => item['id'] == selected);
                   final item = chosen.isEmpty ? null : chosen.first;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 16),
-                    child: Text(
-                      [
-                        if (point != null)
-                          'Curseur : X ${point.dx.toStringAsFixed(2)} m • Y ${point.dy.toStringAsFixed(2)} m',
-                        if (item != null)
-                          '${item['label']} : X ${number(item['x']).toStringAsFixed(2)} m • Y ${number(item['y']).toStringAsFixed(2)} m',
-                      ].join('\n'),
-                      style: const TextStyle(fontSize: 11),
+                  return SizedBox(
+                    width: 330,
+                    height: 40,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 16),
+                      child: Text(
+                        [
+                          if (point != null)
+                            'Curseur : X ${point.dx.toStringAsFixed(2)} m • Y ${point.dy.toStringAsFixed(2)} m',
+                          if (item != null)
+                            '${item['label']} : X ${number(item['x']).toStringAsFixed(2)} m • Y ${number(item['y']).toStringAsFixed(2)} m',
+                        ].join('\n'),
+                        style: const TextStyle(fontSize: 11),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   );
                 },
@@ -4254,20 +5273,56 @@ class _HomeState extends State<Home> {
         ),
       );
   Future<void> roomClear() async {
+    if (planReadOnly) {
+      toast('Plan verrouillé.');
+      return;
+    }
     final choices = <String>{};
+    final furnitureGroups = <String, List<Json>>{};
+    for (final item in tables(p!)) {
+      final model = rows(
+        p!,
+        'types',
+      ).where((t) => t['id'] == item['type']).firstOrNull;
+      final label = model != null
+          ? '${model['name']}'
+          : switch (item['kind']) {
+              'chair' => 'Chaises sans modèle',
+              'bench' => 'Bancs sans modèle',
+              'pmr' => 'Emplacements PMR sans modèle',
+              _ => 'Tables sans modèle',
+            };
+      final key = model != null
+          ? 'model:${model['id']}'
+          : 'kind:${item['kind']}';
+      furnitureGroups.putIfAbsent(key, () => []).add({
+        ...item,
+        '_clearLabel': label,
+      });
+    }
+    final selectedFurniture = <String>{};
+    Set<String> furnitureIds() => {
+      for (final key in selectedFurniture)
+        for (final item in furnitureGroups[key]!) item['id'] as String,
+    };
     var includeLocked = false;
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, update) {
           final preview = clone(p!);
-          clearRoom(preview, choices, includeLocked: includeLocked);
+          clearRoom(
+            preview,
+            choices,
+            includeLocked: includeLocked,
+            furnitureIds: furnitureIds(),
+          );
           final objects =
               rows(p!, 'items').length - rows(preview, 'items').length;
           final before = workspaceStats(p!), after = workspaceStats(preview);
           final assigned =
               (before['assigned'] as int) - (after['assigned'] as int);
-          return AlertDialog(
+          return KeyboardDialog(
             title: const Text('Vider la salle'),
             content: SizedBox(
               width: 540,
@@ -4279,20 +5334,66 @@ class _HomeState extends State<Home> {
                     const Text(
                       'Choisir les éléments à retirer. Les réservations, effectifs et préférences entre groupes restent conservés.',
                     ),
-                    ...roomClearChoices.entries.map(
-                      (e) => CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(e.value),
-                        value: choices.contains(e.key),
-                        onChanged: (v) => update(() {
-                          if (v == true) {
-                            choices.add(e.key);
-                          } else {
-                            choices.remove(e.key);
-                          }
-                        }),
-                      ),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Mobilier placé'),
+                      tristate: true,
+                      value: selectedFurniture.isEmpty
+                          ? false
+                          : selectedFurniture.length == furnitureGroups.length
+                          ? true
+                          : null,
+                      onChanged: furnitureGroups.isEmpty
+                          ? null
+                          : (v) => update(() {
+                              if (selectedFurniture.length ==
+                                  furnitureGroups.length) {
+                                selectedFurniture.clear();
+                                choices.remove('tables');
+                              } else {
+                                selectedFurniture.addAll(furnitureGroups.keys);
+                                choices.add('tables');
+                              }
+                            }),
                     ),
+                    for (final entry in furnitureGroups.entries)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 24),
+                        child: CheckboxListTile(
+                          title: Text(
+                            '${entry.value.first['_clearLabel']} (${entry.value.length})',
+                          ),
+                          value: selectedFurniture.contains(entry.key),
+                          onChanged: (v) => update(() {
+                            if (v == true) {
+                              selectedFurniture.add(entry.key);
+                            } else {
+                              selectedFurniture.remove(entry.key);
+                            }
+                            if (selectedFurniture.isEmpty) {
+                              choices.remove('tables');
+                            } else {
+                              choices.add('tables');
+                            }
+                          }),
+                        ),
+                      ),
+                    ...roomClearChoices.entries
+                        .where((e) => e.key != 'tables')
+                        .map(
+                          (e) => CheckboxListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(e.value),
+                            value: choices.contains(e.key),
+                            onChanged: (v) => update(() {
+                              if (v == true) {
+                                choices.add(e.key);
+                              } else {
+                                choices.remove(e.key);
+                              }
+                            }),
+                          ),
+                        ),
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
                       title: const Text('Inclure les éléments verrouillés'),
@@ -4300,11 +5401,11 @@ class _HomeState extends State<Home> {
                       onChanged: (v) => update(() => includeLocked = v!),
                     ),
                     Text(
-                      '$objects objets retirés • $assigned personnes désattribuées • ${rows(p!, 'types').length - rows(preview, 'types').length} types retirés.',
+                      '$objects objets retirés • $assigned personnes désattribuées.',
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Les éléments verrouillés sont conservés sauf si la case est cochée. Retirer une table retire aussi ses attributions, même verrouillées. Retirer seulement les types conserve les pièces placées, détachées du stock. Annuler permet de revenir en arrière après l’opération.',
+                      'Les éléments verrouillés sont conservés sauf si la case est cochée. Retirer une pièce de mobilier retire aussi ses assignations, même verrouillées. L’inventaire de mobilier est toujours conservé. Annuler permet de revenir en arrière après l’opération.',
                     ),
                   ],
                 ),
@@ -4328,7 +5429,12 @@ class _HomeState extends State<Home> {
     );
     if (ok == true) {
       change(() {
-        clearRoom(p!, choices, includeLocked: includeLocked);
+        clearRoom(
+          p!,
+          choices,
+          includeLocked: includeLocked,
+          furnitureIds: furnitureIds(),
+        );
         if (!rows(p!, 'items').any((i) => i['id'] == selected)) selected = null;
       });
       toast('Éléments cochés retirés. Réservations conservées.');
@@ -4336,12 +5442,20 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> arrangeWithOptions() async {
+    if (planReadOnly) {
+      toast('Plan verrouillé.');
+      return;
+    }
     if (arranging || arrangementDialogOpen || p == null) return;
     arrangementDialogOpen = true;
     try {
       var corner = p!['arrangementCorner'] ?? arrangementCorners.first;
       final available = parcoursAvailable(p!);
-      var mode = available && p!['arrangementMode'] == 'Parcours'
+      var mode =
+          p!['arrangementMode'] == 'Scène' &&
+              tables(p!).any((t) => t['kind'] != 'table')
+          ? 'Scène'
+          : available && p!['arrangementMode'] == 'Parcours'
           ? 'Parcours'
           : 'Standard';
       final settings = p!['parcoursSettings'] as Map? ?? {};
@@ -4361,7 +5475,7 @@ class _HomeState extends State<Home> {
       final route = DialogRoute<bool>(
         context: context,
         builder: (c) => StatefulBuilder(
-          builder: (c, update) => AlertDialog(
+          builder: (c, update) => KeyboardDialog(
             title: const Text('Disposition automatique'),
             content: SizedBox(
               width: 460,
@@ -4369,22 +5483,29 @@ class _HomeState extends State<Home> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (available)
+                    if (available ||
+                        tables(p!).any((t) => t['kind'] != 'table'))
                       DropdownButtonFormField<String>(
                         initialValue: mode,
                         isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Mode de disposition',
                         ),
-                        items: const [
-                          DropdownMenuItem(
+                        items: [
+                          const DropdownMenuItem(
                             value: 'Standard',
                             child: Text('Standard'),
                           ),
-                          DropdownMenuItem(
-                            value: 'Parcours',
-                            child: Text('Parcours des exposants en S'),
-                          ),
+                          if (available)
+                            const DropdownMenuItem(
+                              value: 'Parcours',
+                              child: Text('Parcours des exposants en S'),
+                            ),
+                          if (tables(p!).any((t) => t['kind'] != 'table'))
+                            const DropdownMenuItem(
+                              value: 'Scène',
+                              child: Text('Sièges face à une scène'),
+                            ),
                         ],
                         onChanged: (value) => update(() => mode = value!),
                       ),
@@ -4591,9 +5712,30 @@ class _HomeState extends State<Home> {
       final accepted = await Navigator.of(context).push(route);
       await route.completed;
       if (accepted != true || !mounted) return;
+      if (mode == 'Scène') {
+        arrangementDialogOpen = false;
+        await audienceDisposition();
+        return;
+      }
       final draft = clone(p!);
       draft['arrangementCorner'] = corner;
       draft['arrangementMode'] = mode;
+      if (mode == 'Parcours' && parcoursFurnitureError(draft) != null) {
+        await showDialog<void>(
+          context: context,
+          builder: (c) => KeyboardDialog(
+            title: const Text('Parcours impossible'),
+            content: Text(parcoursFurnitureError(draft)!),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(c),
+                child: const Text('Fermer'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
       if (mode == 'Parcours') {
         for (final zone in rows(
           draft,
@@ -4625,7 +5767,7 @@ class _HomeState extends State<Home> {
         barrierDismissible: false,
         builder: (_) => const PopScope(
           canPop: false,
-          child: AlertDialog(
+          child: KeyboardDialog(
             content: Row(
               children: [
                 SizedBox(
@@ -4759,7 +5901,13 @@ class _HomeState extends State<Home> {
       child: IconButton(
         key: ValueKey('plan-tool-$id'),
         tooltip: label,
-        onPressed: callback,
+        onPressed:
+            planReadOnly &&
+                !['magnet', 'measure', 'center', 'plan-lock'].contains(id)
+            ? null
+            : id == 'plan-lock' && eventReadOnly
+            ? null
+            : callback,
         isSelected: active,
         padding: EdgeInsets.zero,
         style: IconButton.styleFrom(
@@ -4782,7 +5930,10 @@ class _HomeState extends State<Home> {
     child: PopupMenuButton<String>(
       key: ValueKey('plan-tool-$id'),
       tooltip: label,
-      enabled: entries.isNotEmpty,
+      enabled:
+          entries.isNotEmpty &&
+          !(planReadOnly &&
+              ['rotate', 'joining', 'wall', 'settings', 'layers'].contains(id)),
       itemBuilder: (_) => entries,
       onSelected: onSelected,
       child: toolFace(icon, active: active, enabled: entries.isNotEmpty),
@@ -4824,6 +5975,10 @@ class _HomeState extends State<Home> {
         targets.isNotEmpty && targets.every((i) => i['fixed'] != true);
     final adaptive =
         item != null && item['kind'] == 'table' && item['capacity'] > 0;
+    final outsideTables = tables(p!)
+        .where((t) => t['fixed'] != true && tableOutsideRoom(p!, t))
+        .map((t) => t['id'] as String)
+        .toSet();
     return LayoutBuilder(
       builder: (context, constraints) => SizedBox(
         width: constraints.maxHeight < 680 ? 96 : 52,
@@ -4842,60 +5997,123 @@ class _HomeState extends State<Home> {
                 runSpacing: 1,
                 children: [
                   planTool(
+                    'plan-lock',
+                    p!['planLocked'] == true ? Icons.lock : Icons.lock_open,
+                    p!['planLocked'] == true
+                        ? 'Déverrouiller le plan'
+                        : 'Verrouiller le plan',
+                    togglePlanLock,
+                    active: p!['planLocked'] == true,
+                  ),
+                  planTool(
                     'magnet',
                     Icons.my_location,
                     'Magnétisme — Alt pour déplacer librement',
                     () => setState(() => magnetismEnabled = !magnetismEnabled),
                     active: magnetismEnabled,
                   ),
-                  planTool(
-                    'labels',
-                    Icons.badge_outlined,
-                    'Afficher les groupes par place',
-                    () => setState(() => showPlaceLabels = !showPlaceLabels),
-                    active: showPlaceLabels,
-                  ),
-                  planTool(
+                  planMenu(
                     'select',
-                    Icons.select_all,
-                    'Sélection multiple — Ctrl + clic',
-                    () => setState(() => multiSelect = !multiSelect),
-                    active: multiSelect,
+                    selectRectangle
+                        ? Icons.select_all
+                        : moveAssembly
+                        ? Icons.widgets_outlined
+                        : Icons.ads_click,
+                    selectRectangle
+                        ? 'Sélection — rectangle'
+                        : moveAssembly
+                        ? 'Sélection — groupée'
+                        : 'Sélection — multiple',
+                    [
+                      CheckedPopupMenuItem(
+                        value: 'multiple',
+                        checked: !moveAssembly && !selectRectangle,
+                        child: const Text('Sélection multiple — Ctrl + clic'),
+                      ),
+                      CheckedPopupMenuItem(
+                        value: 'rectangle',
+                        checked: selectRectangle,
+                        child: const Text(
+                          'Sélection par rectangle — Ctrl pour compléter',
+                        ),
+                      ),
+                      CheckedPopupMenuItem(
+                        value: 'group',
+                        checked: moveAssembly,
+                        child: const Text('Sélection groupée — Ctrl + clic'),
+                      ),
+                    ],
+                    (value) => setState(() {
+                      moveAssembly = value == 'group';
+                      selectRectangle = value == 'rectangle';
+                      multiSelect = false;
+                    }),
+                  ),
+                  planMenu(
+                    'display',
+                    Icons.visibility_outlined,
+                    'Affichage',
+                    [
+                      CheckedPopupMenuItem(
+                        value: 'route',
+                        checked: routeVisible,
+                        child: const Text('Afficher le parcours proposé'),
+                      ),
+                      CheckedPopupMenuItem(
+                        value: 'names',
+                        checked: showPlaceLabels,
+                        child: const Text('Afficher les noms sur le mobilier'),
+                      ),
+                    ],
+                    (value) => setState(() {
+                      if (value == 'route') {
+                        if (eventReadOnly) {
+                          routeVisibilityOverride = !routeVisible;
+                        } else {
+                          p!['showParcours'] = !routeVisible;
+                        }
+                      }
+                      if (value == 'names') showPlaceLabels = !showPlaceLabels;
+                      savePlanView();
+                      persist();
+                    }),
                   ),
                   planMenu(
                     'filter',
                     Icons.filter_alt_outlined,
-                    'Filtrer les tables',
-                    {...planFilters, ...markerNames}
+                    'Filtrer',
+                    availablePlanFilters(p!).entries
                         .map(
-                          (value) => CheckedPopupMenuItem<String>(
-                            value: value,
-                            checked: planFilter == value,
-                            child: Text(value),
+                          (entry) => CheckedPopupMenuItem<String>(
+                            value: entry.key,
+                            checked: planFilter == entry.key,
+                            child: Text(entry.value),
                           ),
                         )
                         .toList(),
                     (value) => setState(() => planFilter = value),
                     active: planFilter != planFilters.first,
                   ),
-                  planTool(
-                    'assembly',
-                    Icons.view_module_outlined,
-                    'Déplacer les tables accolées ensemble',
-                    () => setState(() {
-                      moveAssembly = !moveAssembly;
-                      if (moveAssembly &&
-                          item != null &&
-                          item['kind'] == 'table') {
-                        final geo = PlanGeometry(p!, rows(p!, 'items'));
-                        selectedTables.addAll(
-                          tables(p!)
-                              .where((t) => geo.sameAssembly(item, t))
-                              .map((t) => t['id'] as String),
-                        );
-                      }
-                    }),
-                    active: moveAssembly,
+                  planMenu(
+                    'layers',
+                    Icons.layers_outlined,
+                    'Ordre d’affichage',
+                    [
+                      for (final entry in planLayerActions.entries)
+                        PopupMenuItem(
+                          value: entry.key,
+                          enabled:
+                              selectedPlanIds().isNotEmpty &&
+                              !planReadOnly &&
+                              !rows(p!, 'items').any(
+                                (i) =>
+                                    selectedPlanIds().contains(i['id']) &&
+                                    i['fixed'] == true,
+                              ),
+                          child: Text(entry.value),
+                        ),
+                    ],
+                    reorderPlanSelection,
                   ),
                   planMenu('rotate', Icons.rotate_right, 'Pivoter 90°', [
                     PopupMenuItem(
@@ -4910,7 +6128,7 @@ class _HomeState extends State<Home> {
                     PopupMenuItem(
                       value: 'all',
                       enabled: tables(p!).isNotEmpty,
-                      child: const Text('Toutes les tables : 90°'),
+                      child: const Text('Tout le mobilier : 90°'),
                     ),
                   ], (value) => rotatePlanSelection(item, all: value == 'all')),
                   planTool(
@@ -4946,33 +6164,77 @@ class _HomeState extends State<Home> {
                     'edit',
                     Icons.edit_outlined,
                     'Modifier l’objet',
-                    item == null ? null : () => itemEdit(item),
-                  ),
-                  planMenu(
-                    'tables',
-                    Icons.table_restaurant_outlined,
-                    'Ajouter une table',
-                    rows(p!, 'types')
-                        .where((type) => type['shape'] != 'banc')
-                        .map(
-                          (type) => PopupMenuItem<String>(
-                            value: type['id'],
-                            child: Text('+ ${type['name']}'),
-                          ),
-                        )
-                        .toList(),
-                    (value) => addTable(
-                      rows(
-                        p!,
-                        'types',
-                      ).firstWhere((type) => type['id'] == value),
-                    ),
+                    item == null
+                        ? null
+                        : () => targets.length > 1
+                              ? bulkPropertiesEditor()
+                              : itemEdit(item),
                   ),
                   planTool(
-                    'objects',
-                    Icons.add_box_outlined,
-                    'Ajouter un objet ou une zone',
-                    addObject,
+                    'remove-outside',
+                    Icons.delete_sweep_outlined,
+                    'Retirer mobilier hors salle',
+                    outsideTables.isEmpty
+                        ? null
+                        : () => removePlanSelection(itemIds: outsideTables),
+                  ),
+                  planMenu(
+                    'organize',
+                    Icons.more_horiz,
+                    'Outils complémentaires',
+                    [
+                      const PopupMenuItem(
+                        value: 'search',
+                        child: Text('Rechercher sur le plan…'),
+                      ),
+                      PopupMenuItem(
+                        value: 'align',
+                        enabled: !planReadOnly,
+                        child: const Text('Aligner / répartir…'),
+                      ),
+                      PopupMenuItem(
+                        value: 'duplicate',
+                        enabled: !planReadOnly,
+                        child: const Text('Dupliquer la sélection'),
+                      ),
+                      PopupMenuItem(
+                        value: 'properties',
+                        enabled: !planReadOnly,
+                        child: const Text('Propriétés de la sélection…'),
+                      ),
+                      PopupMenuItem(
+                        value: 'numbers',
+                        enabled: !planReadOnly,
+                        child: const Text('Renuméroter volontairement…'),
+                      ),
+                    ],
+                    organizerTool,
+                  ),
+                  addPlanMenu(),
+                  planTool(
+                    'clear-room',
+                    Icons.cleaning_services_outlined,
+                    'Vider la salle',
+                    roomClear,
+                  ),
+                  planMenu(
+                    'settings',
+                    Icons.settings_outlined,
+                    'Salle et confort',
+                    [
+                      const PopupMenuItem(value: 'room', child: Text('Salle')),
+                      const PopupMenuItem(
+                        value: 'comfort',
+                        child: Text('Confort'),
+                      ),
+                    ],
+                    (value) {
+                      if (value == 'room') {
+                        roomEdit();
+                      } else {
+                        comfortEdit(p!);
+                      }
+                    },
                   ),
                   planMenu(
                     'joining',
@@ -5020,7 +6282,7 @@ class _HomeState extends State<Home> {
                     'center',
                     Icons.center_focus_strong,
                     'Recentrer la vue',
-                    () => transform.value = Matrix4.identity(),
+                    resetPlanView,
                   ),
                 ],
               ),
@@ -5032,17 +6294,15 @@ class _HomeState extends State<Home> {
   }
 
   Widget plan() {
-    selectedTables.removeWhere((id) => !tables(p!).any((t) => t['id'] == id));
-    final geometry = PlanGeometry(p!, rows(p!, 'items'));
-    final attributionRows = tableAssignments(p!, geometry);
-    final conflicts = {
-      for (final i in tables(p!))
-        if (!fits(p!, i, rows(p!, 'items'), geometry: geometry))
-          i['id'] as String,
-    };
+    final presentFurniture = tables(p!).map((t) => t['id']).toSet();
+    selectedTables.removeWhere((id) => !presentFurniture.contains(id));
+    final review = planReview();
+    final geometry = review.geometry;
+    final attributionRows = review.assignments;
+    final conflicts = review.conflicts;
     final palette = planMarkerColors(p!);
     final markerNames = palette.keys.toList();
-    if (!{...planFilters, ...markerNames}.contains(planFilter)) {
+    if (!availablePlanFilters(p!).containsKey(planFilter)) {
       planFilter = 'Toutes les tables';
     }
     final markerColors = {
@@ -5080,43 +6340,12 @@ class _HomeState extends State<Home> {
         heading(
           '${room['name']}',
           '${room['width']} × ${room['height']} m • glisser un objet ; glisser le fond pour déplacer la vue',
-          [
-            TextButton(onPressed: roomEdit, child: const Text('Salle')),
-            TextButton(
-              key: const ValueKey('event-comfort'),
-              onPressed: () => comfortEdit(p!),
-              child: const Text('Confort'),
-            ),
-            TextButton.icon(
-              onPressed: roomClear,
-              icon: const Icon(Icons.clear_all),
-              label: const Text('Vider la salle'),
-            ),
-            TextButton(
-              onPressed: () => setState(() => page = 2),
-              child: const Text('Réservations →'),
-            ),
-            FilledButton.tonal(
-              onPressed: arranging ? null : arrangeWithOptions,
-              child: arranging
-                  ? const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                        SizedBox(width: 8),
-                        Text('Disposition en cours…'),
-                      ],
-                    )
-                  : const Text('Disposer tables'),
-            ),
-          ],
+          [],
         ),
+        selectionSummary(),
         Expanded(
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: Container(
@@ -5127,6 +6356,7 @@ class _HomeState extends State<Home> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       planToolbar(t, markerNames),
                       Expanded(
@@ -5140,7 +6370,20 @@ class _HomeState extends State<Home> {
                                 (constraints.maxHeight - 60) / drawingHeight,
                               ),
                             );
+                            planScale = scale;
+                            planOrigin = Offset(
+                              (constraints.maxWidth - drawingWidth * scale) / 2,
+                              (constraints.maxHeight - drawingHeight * scale) /
+                                  2,
+                            );
                             return InteractiveViewer(
+                              panEnabled: !selectRectangle && !measuring,
+                              onInteractionEnd: (_) {
+                                if (selectRectangle || measuring) return;
+                                setState(() {});
+                                savePlanView();
+                                persist();
+                              },
                               transformationController: transform,
                               minScale: .4,
                               maxScale: 5,
@@ -5149,10 +6392,14 @@ class _HomeState extends State<Home> {
                                 child: MouseRegion(
                                   onExit: (_) => cursorPosition.value = null,
                                   child: Listener(
-                                    onPointerDown: (_) =>
-                                        additiveClick = HardwareKeyboard
-                                            .instance
-                                            .isControlPressed,
+                                    onPointerDown: (event) {
+                                      additiveClick = HardwareKeyboard
+                                          .instance
+                                          .isControlPressed;
+                                      if (event.buttons == 2) {
+                                        planBackgroundContext(event);
+                                      }
+                                    },
                                     onPointerHover: (event) =>
                                         cursorPosition.value =
                                             event.localPosition / scale,
@@ -5160,11 +6407,13 @@ class _HomeState extends State<Home> {
                                         cursorPosition.value =
                                             event.localPosition / scale,
                                     child: SizedBox(
+                                      key: planCanvasSurfaceKey,
                                       width: drawingWidth * scale,
                                       height: drawingHeight * scale,
                                       child: Stack(
+                                        key: const ValueKey('plan-canvas'),
                                         clipBehavior: Clip.none,
-                                        children: [
+                                        children: orderedPlanWidgets([
                                           Positioned(
                                             left: 0,
                                             top: 0,
@@ -5180,7 +6429,11 @@ class _HomeState extends State<Home> {
                                               ),
                                             ),
                                           ),
-                                          if (p!['showParcours'] != false &&
+                                          ...annotationPlanWidgets(
+                                            scale,
+                                            foreground: false,
+                                          ),
+                                          if (routeVisible &&
                                               parcoursPaths(
                                                 p!,
                                                 allowStale: true,
@@ -5214,369 +6467,473 @@ class _HomeState extends State<Home> {
                                                 ),
                                               ),
                                             ),
-                                          ...planPaintOrder(p!).map(
-                                            (i) => Positioned(
-                                              left: number(i['x']) * scale,
-                                              top: number(i['y']) * scale,
-                                              child: GestureDetector(
-                                                key: ValueKey(
-                                                  'plan-item-${i['id']}',
-                                                ),
-                                                behavior: i['kind'] == 'zone'
-                                                    ? HitTestBehavior.opaque
-                                                    : HitTestBehavior
-                                                          .deferToChild,
-                                                onTap: () => selectPlanItem(
+                                          ...planPaintOrder(p!)
+                                              .where(
+                                                (i) => !isPlanAnnotation(i),
+                                              )
+                                              .map(
+                                                (i) => positionedFurniture(
+                                                  p!,
                                                   i,
-                                                  additive:
-                                                      multiSelect ||
-                                                      additiveClick,
-                                                ),
-                                                onDoubleTap: () => itemEdit(i),
-                                                onPanStart: (_) {
-                                                  dragBlocked =
-                                                      i['fixed'] == true;
-                                                  if (i['fixed'] != true) {
-                                                    if (!selectedTables
-                                                        .contains(i['id'])) {
-                                                      selectPlanItem(i);
-                                                    }
-                                                    selected = i['id'];
-                                                    if (moveAssembly &&
-                                                        i['kind'] == 'table') {
-                                                      final geo = PlanGeometry(
-                                                        p!,
-                                                        rows(p!, 'items'),
-                                                      );
-                                                      selectedTables.addAll(
-                                                        tables(p!)
-                                                            .where(
-                                                              (other) => geo
-                                                                  .sameAssembly(
-                                                                    i,
-                                                                    other,
-                                                                  ),
-                                                            )
-                                                            .map(
-                                                              (other) =>
-                                                                  other['id']
-                                                                      as String,
-                                                            ),
-                                                      );
-                                                    }
-                                                    draggingTables =
-                                                        i['kind'] == 'table'
-                                                        ? {...selectedTables}
-                                                        : {};
-                                                    if (draggingTables.length >
-                                                            1 &&
-                                                        tables(p!).any(
-                                                          (t) =>
-                                                              draggingTables
-                                                                  .contains(
-                                                                    t['id'],
-                                                                  ) &&
-                                                              t['fixed'] ==
-                                                                  true,
-                                                        )) {
-                                                      draggingTables.clear();
-                                                      dragBlocked = true;
-                                                      toast(
-                                                        'Déverrouiller les tables de cet ensemble.',
-                                                      );
-                                                      return;
-                                                    }
-                                                    checkpoint();
-                                                    final ids =
-                                                        draggingTables.isEmpty
-                                                        ? {i['id'] as String}
-                                                        : draggingTables;
-                                                    dragOrigins.clear();
-                                                    for (final item
-                                                        in rows(
-                                                          p!,
-                                                          'items',
-                                                        ).where(
-                                                          (v) => ids.contains(
-                                                            v['id'],
-                                                          ),
-                                                        )) {
-                                                      dragOrigins[item['id']] =
-                                                          clone(item);
-                                                      item.remove(
-                                                        'unplacedByArrangement',
-                                                      );
-                                                    }
-                                                    dragDx = dragDy = 0;
-                                                    dragSnap =
-                                                        const MagneticSnap();
-                                                  }
-                                                },
-                                                onPanUpdate: (d) {
-                                                  if (i['fixed'] == true ||
-                                                      dragBlocked) {
-                                                    return;
-                                                  }
-                                                  setState(
-                                                    () => movePlanDrag(
-                                                      d.delta / scale,
-                                                    ),
-                                                  );
-                                                },
-                                                onPanEnd: (_) {
-                                                  if (dragBlocked) return;
-                                                  setState(() {
-                                                    movePlanDrag(Offset.zero);
-                                                    dragSnap =
-                                                        const MagneticSnap();
-                                                  });
-                                                  persist();
-                                                },
-                                                onPanCancel: () {
-                                                  if (dragBlocked ||
-                                                      dragOrigins.isEmpty) {
-                                                    return;
-                                                  }
-                                                  setState(
-                                                    () => dragSnap =
-                                                        const MagneticSnap(),
-                                                  );
-                                                  persist();
-                                                },
-                                                child: Opacity(
-                                                  opacity:
-                                                      i['kind'] == 'table' &&
-                                                          !tableMatchesFilter(
-                                                            p!,
+                                                  geometry,
+                                                  scale,
+                                                  Positioned(
+                                                    left:
+                                                        number(i['x']) * scale,
+                                                    top: number(i['y']) * scale,
+                                                    child: GestureDetector(
+                                                      key: ValueKey(
+                                                        'plan-item-${i['id']}',
+                                                      ),
+                                                      behavior:
+                                                          i['kind'] == 'zone'
+                                                          ? HitTestBehavior
+                                                                .opaque
+                                                          : HitTestBehavior
+                                                                .deferToChild,
+                                                      onTap: () =>
+                                                          selectPlanItem(
                                                             i,
-                                                            planFilter,
-                                                            geometry,
-                                                          ) &&
-                                                          !conflicts.contains(
-                                                            i['id'],
-                                                          )
-                                                      ? .22
-                                                      : 1,
-                                                  child: SizedBox(
-                                                    width:
-                                                        number(i['w']) * scale,
-                                                    height:
-                                                        number(i['h']) * scale,
-                                                    child: CustomPaint(
-                                                      painter: ItemPainter(
-                                                        i,
-                                                        i['id'] == selected ||
-                                                            (i['kind'] ==
-                                                                    'table' &&
-                                                                selectedTables
-                                                                    .contains(
-                                                                      i['id'],
-                                                                    )),
-                                                        conflict: conflicts
-                                                            .contains(i['id']),
-                                                        occupied:
-                                                            counts[i['id']] ??
-                                                            0,
-                                                        capacity:
-                                                            i['kind'] == 'table'
-                                                            ? geometry.capacity(
+                                                            toggleHandles: true,
+                                                            additive:
+                                                                multiSelect ||
+                                                                additiveClick,
+                                                          ),
+                                                      onDoubleTap: planReadOnly
+                                                          ? null
+                                                          : () => itemEdit(i),
+                                                      onSecondaryTapDown: (d) =>
+                                                          planContextMenu(
+                                                            d.globalPosition,
+                                                            i,
+                                                          ),
+                                                      onPanStart: (_) {
+                                                        dragBlocked =
+                                                            planReadOnly ||
+                                                            i['fixed'] == true;
+                                                        if (!planReadOnly &&
+                                                            i['fixed'] !=
+                                                                true) {
+                                                          if (!selectedTables
+                                                              .contains(
+                                                                i['id'],
+                                                              )) {
+                                                            selectPlanItem(i);
+                                                          }
+                                                          selected = i['id'];
+                                                          if (moveAssembly &&
+                                                              i['kind'] ==
+                                                                  'table') {
+                                                            final geo =
+                                                                PlanGeometry(
+                                                                  p!,
+                                                                  rows(
+                                                                    p!,
+                                                                    'items',
+                                                                  ),
+                                                                );
+                                                            selectedTables.addAll(
+                                                              tables(p!)
+                                                                  .where(
+                                                                    (
+                                                                      other,
+                                                                    ) => geo
+                                                                        .sameAssembly(
+                                                                          i,
+                                                                          other,
+                                                                        ),
+                                                                  )
+                                                                  .map(
+                                                                    (other) =>
+                                                                        other['id']
+                                                                            as String,
+                                                                  ),
+                                                            );
+                                                          }
+                                                          draggingTables =
+                                                              isSeatingFurniture(
                                                                 i,
                                                               )
-                                                            : 0,
-                                                      ),
-                                                      child: Stack(
-                                                        clipBehavior: Clip.none,
-                                                        children: [
-                                                          if (i['kind'] ==
-                                                                  'table' &&
-                                                              showPlaceLabels)
-                                                            Positioned.fill(
-                                                              child: IgnorePointer(
-                                                                child: ValueListenableBuilder<Matrix4>(
-                                                                  valueListenable:
-                                                                      transform,
-                                                                  builder: (_, matrix, child) => CustomPaint(
-                                                                    painter: PlaceLabelsPainter(
-                                                                      geometry
-                                                                          .view(
-                                                                            i,
-                                                                          ),
-                                                                      tablePlaceLabels(
-                                                                        p!,
-                                                                        i,
-                                                                        geometry,
+                                                              ? {...selectedTables}
+                                                              : {};
+                                                          if (draggingTables
+                                                                      .length >
+                                                                  1 &&
+                                                              tables(p!).any(
+                                                                (t) =>
+                                                                    draggingTables
+                                                                        .contains(
+                                                                          t['id'],
+                                                                        ) &&
+                                                                    t['fixed'] ==
+                                                                        true,
+                                                              )) {
+                                                            draggingTables
+                                                                .clear();
+                                                            dragBlocked = true;
+                                                            toast(
+                                                              'Déverrouiller les tables de cet ensemble.',
+                                                            );
+                                                            return;
+                                                          }
+                                                          checkpoint();
+                                                          final ids =
+                                                              draggingTables
+                                                                  .isEmpty
+                                                              ? {
+                                                                  i['id']
+                                                                      as String,
+                                                                }
+                                                              : draggingTables;
+                                                          dragOrigins.clear();
+                                                          for (final item
+                                                              in rows(
+                                                                p!,
+                                                                'items',
+                                                              ).where(
+                                                                (v) => ids
+                                                                    .contains(
+                                                                      v['id'],
+                                                                    ),
+                                                              )) {
+                                                            dragOrigins[item['id']] =
+                                                                clone(item);
+                                                            item.remove(
+                                                              'unplacedByArrangement',
+                                                            );
+                                                          }
+                                                          dragDx = dragDy = 0;
+                                                          dragSnap =
+                                                              const MagneticSnap();
+                                                        }
+                                                      },
+                                                      onPanUpdate: (d) {
+                                                        if (i['fixed'] ==
+                                                                true ||
+                                                            dragBlocked) {
+                                                          return;
+                                                        }
+                                                        setState(
+                                                          () => movePlanDrag(
+                                                            d.delta / scale,
+                                                          ),
+                                                        );
+                                                      },
+                                                      onPanEnd: (_) {
+                                                        if (dragBlocked) return;
+                                                        setState(() {
+                                                          movePlanDrag(
+                                                            Offset.zero,
+                                                          );
+                                                          dragSnap =
+                                                              const MagneticSnap();
+                                                        });
+                                                        persist();
+                                                      },
+                                                      onPanCancel: () {
+                                                        if (dragBlocked ||
+                                                            dragOrigins
+                                                                .isEmpty) {
+                                                          return;
+                                                        }
+                                                        setState(
+                                                          () => dragSnap =
+                                                              const MagneticSnap(),
+                                                        );
+                                                        persist();
+                                                      },
+                                                      child: Opacity(
+                                                        opacity:
+                                                            i['kind'] ==
+                                                                    'table' &&
+                                                                !tableMatchesFilter(
+                                                                  p!,
+                                                                  i,
+                                                                  planFilter,
+                                                                  geometry,
+                                                                ) &&
+                                                                !conflicts
+                                                                    .contains(
+                                                                      i['id'],
+                                                                    )
+                                                            ? .22
+                                                            : 1,
+                                                        child: SizedBox(
+                                                          width:
+                                                              number(i['w']) *
+                                                              scale,
+                                                          height:
+                                                              number(i['h']) *
+                                                              scale,
+                                                          child: CustomPaint(
+                                                            painter: ItemPainter(
+                                                              i,
+                                                              i['id'] ==
+                                                                      selected ||
+                                                                  selectedObjects
+                                                                      .contains(
+                                                                        i['id'],
+                                                                      ) ||
+                                                                  (i['kind'] ==
+                                                                          'table' &&
+                                                                      selectedTables
+                                                                          .contains(
+                                                                            i['id'],
+                                                                          )),
+                                                              conflict:
+                                                                  conflicts
+                                                                      .contains(
+                                                                        i['id'],
                                                                       ),
-                                                                      geometry.blocked[i['id']] ??
-                                                                          {},
-                                                                      scale,
-                                                                      scale * matrix.getMaxScaleOnAxis() >=
-                                                                          85,
+                                                              occupied:
+                                                                  counts[i['id']] ??
+                                                                  0,
+                                                              capacity:
+                                                                  isSeatingFurniture(
+                                                                    i,
+                                                                  )
+                                                                  ? usableSeatCapacity(
+                                                                      p!,
+                                                                      i,
+                                                                    )
+                                                                  : 0,
+                                                            ),
+                                                            child: Stack(
+                                                              clipBehavior:
+                                                                  Clip.none,
+                                                              children: [
+                                                                if (furnitureUse(
+                                                                      i,
+                                                                    ) ==
+                                                                    furnitureUses[1])
+                                                                  Positioned.fill(
+                                                                    child: IgnorePointer(
+                                                                      child: CustomPaint(
+                                                                        painter: StandPortionsPainter(
+                                                                          p!,
+                                                                          i,
+                                                                          showNames:
+                                                                              showPlaceLabels,
+                                                                        ),
+                                                                      ),
                                                                     ),
                                                                   ),
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          if (i['kind'] ==
-                                                                  'table' &&
-                                                              adaptedPlaces(i)
-                                                                  .isNotEmpty)
-                                                            ...adaptedPlaces(
-                                                              geometry.view(i),
-                                                            ).where((a) => a['slot'] < geometry.capacity(i)).map((
-                                                              a,
-                                                            ) {
-                                                              final points =
-                                                                  placeLabelPositions(
+                                                                if (i['kind'] ==
+                                                                        'bench' ||
+                                                                    i['kind'] ==
+                                                                        'pmr')
+                                                                  Positioned.fill(
+                                                                    child: IgnorePointer(
+                                                                      child:
+                                                                          SeatNumbers(
+                                                                            p!,
+                                                                            i,
+                                                                          ),
+                                                                    ),
+                                                                  ),
+                                                                if (isSeatingFurniture(
+                                                                      i,
+                                                                    ) &&
+                                                                    furnitureUse(
+                                                                          i,
+                                                                        ) ==
+                                                                        furnitureUses
+                                                                            .first &&
+                                                                    showPlaceLabels)
+                                                                  Positioned.fill(
+                                                                    child: IgnorePointer(
+                                                                      child: ValueListenableBuilder<Matrix4>(
+                                                                        valueListenable:
+                                                                            transform,
+                                                                        builder: (_, matrix, child) => CustomPaint(
+                                                                          painter: PlaceLabelsPainter(
+                                                                            geometry.view(
+                                                                              i,
+                                                                            ),
+                                                                            tablePlaceLabels(
+                                                                              p!,
+                                                                              i,
+                                                                              geometry,
+                                                                            ),
+                                                                            geometry.blocked[i['id']] ??
+                                                                                {},
+                                                                            scale,
+                                                                            scale * matrix.getMaxScaleOnAxis() >=
+                                                                                85,
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                if (i['kind'] ==
+                                                                        'table' &&
+                                                                    adaptedPlaces(
+                                                                      i,
+                                                                    ).isNotEmpty)
+                                                                  ...adaptedPlaces(
                                                                     geometry
                                                                         .view(
                                                                           i,
                                                                         ),
-                                                                    geometry
-                                                                        .capacity(
-                                                                          i,
+                                                                  ).where((a) => a['slot'] < geometry.capacity(i)).map((
+                                                                    a,
+                                                                  ) {
+                                                                    final points = placeLabelPositions(
+                                                                      geometry
+                                                                          .view(
+                                                                            i,
+                                                                          ),
+                                                                      geometry
+                                                                          .capacity(
+                                                                            i,
+                                                                          ),
+                                                                      geometry.blocked[i['id']] ??
+                                                                          {},
+                                                                    );
+                                                                    if (a['slot'] >=
+                                                                        points
+                                                                            .length) {
+                                                                      return const SizedBox.shrink();
+                                                                    }
+                                                                    final point =
+                                                                        points[a['slot']];
+                                                                    return Positioned(
+                                                                      left: (point.x * scale - 7).clamp(
+                                                                        0,
+                                                                        max(
+                                                                          0,
+                                                                          number(i['w']) * scale -
+                                                                              14,
                                                                         ),
-                                                                    geometry.blocked[i['id']] ??
-                                                                        {},
-                                                                  );
-                                                              if (a['slot'] >=
-                                                                  points
-                                                                      .length) {
-                                                                return const SizedBox.shrink();
-                                                              }
-                                                              final point =
-                                                                  points[a['slot']];
-                                                              return Positioned(
-                                                                left: (point.x * scale - 7).clamp(
-                                                                  0,
-                                                                  max(
-                                                                    0,
-                                                                    number(i['w']) *
-                                                                            scale -
-                                                                        14,
-                                                                  ),
-                                                                ),
-                                                                top: (point.y * scale - 7).clamp(
-                                                                  0,
-                                                                  max(
-                                                                    0,
-                                                                    number(i['h']) *
-                                                                            scale -
-                                                                        14,
-                                                                  ),
-                                                                ),
-                                                                child: Tooltip(
-                                                                  message:
-                                                                      'Place ${a['slot'] + 1} adaptée : ${a['width']} × ${a['depth']} m',
-                                                                  child: const Icon(
-                                                                    Icons
-                                                                        .accessible,
-                                                                    color: Color(
-                                                                      0xff1565c0,
-                                                                    ),
-                                                                    size: 14,
-                                                                  ),
-                                                                ),
-                                                              );
-                                                            }),
-                                                          if (i['kind'] ==
-                                                              'table')
-                                                            Positioned(
-                                                              bottom: 2,
-                                                              left: 3,
-                                                              right: 3,
-                                                              child: Wrap(
-                                                                spacing: 3,
-                                                                runSpacing: 2,
-                                                                children: [
-                                                                  ...tableMarkers(
-                                                                    p!,
-                                                                    i['id']
-                                                                        as String,
-                                                                  ).map(
-                                                                    (
-                                                                      name,
-                                                                    ) => Tooltip(
-                                                                      message:
-                                                                          name,
-                                                                      child: PlanMarker(
-                                                                        name:
+                                                                      ),
+                                                                      top: (point.y * scale - 7).clamp(
+                                                                        0,
+                                                                        max(
+                                                                          0,
+                                                                          number(i['h']) * scale -
+                                                                              14,
+                                                                        ),
+                                                                      ),
+                                                                      child: Tooltip(
+                                                                        message:
+                                                                            'Place ${a['slot'] + 1} adaptée : ${a['width']} × ${a['depth']} m',
+                                                                        child: const Icon(
+                                                                          Icons
+                                                                              .accessible,
+                                                                          color: Color(
+                                                                            0xff1565c0,
+                                                                          ),
+                                                                          size:
+                                                                              14,
+                                                                        ),
+                                                                      ),
+                                                                    );
+                                                                  }),
+                                                                if (i['kind'] ==
+                                                                    'table')
+                                                                  Positioned(
+                                                                    bottom: 2,
+                                                                    left: 3,
+                                                                    right: 3,
+                                                                    child: Wrap(
+                                                                      spacing:
+                                                                          3,
+                                                                      runSpacing:
+                                                                          2,
+                                                                      children: [
+                                                                        ...tableMarkers(
+                                                                          p!,
+                                                                          i['id']
+                                                                              as String,
+                                                                        ).map(
+                                                                          (
                                                                             name,
-                                                                        color:
-                                                                            markerColors[name]!,
+                                                                          ) => Tooltip(
+                                                                            message:
+                                                                                name,
+                                                                            child: PlanMarker(
+                                                                              name: name,
+                                                                              color: markerColors[name]!,
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                      ],
+                                                                    ),
+                                                                  ),
+                                                                if (conflicts
+                                                                    .contains(
+                                                                      i['id'],
+                                                                    ))
+                                                                  const Positioned(
+                                                                    top: -12,
+                                                                    right: -8,
+                                                                    child: Tooltip(
+                                                                      message: 'Conflit : chevauchement, dégagement ou limite de salle. Voir Contrôles.',
+                                                                      child: Icon(
+                                                                        Icons
+                                                                            .warning_amber,
+                                                                        color: Colors
+                                                                            .red,
+                                                                        size:
+                                                                            16,
                                                                       ),
                                                                     ),
                                                                   ),
-                                                                ],
-                                                              ),
-                                                            ),
-                                                          if (conflicts
-                                                              .contains(
-                                                                i['id'],
-                                                              ))
-                                                            const Positioned(
-                                                              top: -12,
-                                                              right: -8,
-                                                              child: Tooltip(
-                                                                message: 'Conflit : chevauchement, dégagement ou limite de salle. Voir Contrôles.',
-                                                                child: Icon(
-                                                                  Icons
-                                                                      .warning_amber,
-                                                                  color: Colors
-                                                                      .red,
-                                                                  size: 16,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          IgnorePointer(
-                                                            child: Center(
-                                                              child: Text(
-                                                                '${i['label']}${i['kind'] == 'table'
-                                                                    ? i['capacity'] == 0
-                                                                          ? '\nService'
-                                                                          : '\n${counts[i['id']] ?? 0}/${geometry.capacity(i)}${unplacedTable(p!, i) ? '\nNon placée' : ''}'
-                                                                    : ''}',
-                                                                textAlign:
-                                                                    TextAlign
-                                                                        .center,
-                                                                style: TextStyle(
-                                                                  fontSize: max(
-                                                                    8,
-                                                                    min(
-                                                                      12,
-                                                                      scale *
-                                                                          .2,
+                                                                IgnorePointer(
+                                                                  child: Center(
+                                                                    child: Padding(
+                                                                      padding:
+                                                                          const EdgeInsets.all(
+                                                                            2,
+                                                                          ),
+                                                                      child: FittedBox(
+                                                                        fit: BoxFit
+                                                                            .scaleDown,
+                                                                        child: Text(
+                                                                          isSeatingFurniture(i)
+                                                                              ? furnitureUse(i) == furnitureUses[1] && standPortions(p!, i['id']).isNotEmpty
+                                                                                    ? ''
+                                                                                    : furniturePlanLabel(p!, i)
+                                                                              : '${i['label']}',
+                                                                          textAlign:
+                                                                              TextAlign.center,
+                                                                          style: TextStyle(
+                                                                            fontSize: max(
+                                                                              8,
+                                                                              min(
+                                                                                12,
+                                                                                scale * .2,
+                                                                              ),
+                                                                            ),
+                                                                            fontWeight:
+                                                                                FontWeight.bold,
+                                                                            color:
+                                                                                widget.darkMode &&
+                                                                                    i['kind'] == 'zone' &&
+                                                                                    [
+                                                                                      'Invisible',
+                                                                                      'Contour seul',
+                                                                                    ].contains(i['zoneFill'])
+                                                                                ? Theme.of(context).colorScheme.onSurface
+                                                                                : const Color(0xff123c38),
+                                                                          ),
+                                                                        ),
+                                                                      ),
                                                                     ),
                                                                   ),
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .bold,
-                                                                  color:
-                                                                      widget.darkMode &&
-                                                                          i['kind'] ==
-                                                                              'zone' &&
-                                                                          [
-                                                                            'Invisible',
-                                                                            'Contour seul',
-                                                                          ].contains(
-                                                                            i['zoneFill'],
-                                                                          )
-                                                                      ? Theme.of(
-                                                                          context,
-                                                                        ).colorScheme.onSurface
-                                                                      : const Color(
-                                                                          0xff123c38,
-                                                                        ),
                                                                 ),
-                                                              ),
+                                                              ],
                                                             ),
                                                           ),
-                                                        ],
+                                                        ),
                                                       ),
                                                     ),
                                                   ),
                                                 ),
                                               ),
-                                            ),
+                                          ...annotationPlanWidgets(
+                                            scale,
+                                            foreground: true,
                                           ),
                                           if (dragSnap.active)
                                             Positioned.fill(
@@ -5621,10 +6978,82 @@ class _HomeState extends State<Home> {
                                                 ),
                                               ),
                                             ),
+                                          if (selectRectangle && !measuring)
+                                            Positioned.fill(
+                                              child: Listener(
+                                                behavior:
+                                                    HitTestBehavior.opaque,
+                                                onPointerDown: (d) {
+                                                  if (d.buttons !=
+                                                      kPrimaryMouseButton) {
+                                                    return;
+                                                  }
+                                                  selectionStart =
+                                                      selectionEnd =
+                                                          d.localPosition /
+                                                          scale;
+                                                  selectionBase =
+                                                      HardwareKeyboard
+                                                          .instance
+                                                          .isControlPressed
+                                                      ? selectedPlanIds()
+                                                      : <String>{};
+                                                  selectionRectangle.value =
+                                                      Rect.fromPoints(
+                                                        d.localPosition,
+                                                        d.localPosition,
+                                                      );
+                                                },
+                                                onPointerMove: (d) {
+                                                  if (selectionStart == null) {
+                                                    return;
+                                                  }
+                                                  selectionEnd =
+                                                      d.localPosition / scale;
+                                                  selectionRectangle.value =
+                                                      Rect.fromPoints(
+                                                        selectionStart! * scale,
+                                                        d.localPosition,
+                                                      );
+                                                },
+                                                onPointerUp: (_) =>
+                                                    endRectanglePointer(),
+                                                onPointerCancel: (_) {
+                                                  selectionStart =
+                                                      selectionEnd = null;
+                                                  selectionRectangle.value =
+                                                      null;
+                                                },
+                                                child: GestureDetector(
+                                                  behavior:
+                                                      HitTestBehavior.opaque,
+                                                  onPanStart: (_) {},
+                                                  onPanUpdate: (_) {},
+                                                  onPanEnd: (_) =>
+                                                      finishRectangleSelection(),
+                                                  onTap:
+                                                      finishRectangleSelection,
+                                                  onDoubleTap:
+                                                      rectangleDoubleClick,
+                                                  child: RepaintBoundary(
+                                                    child: CustomPaint(
+                                                      painter:
+                                                          SelectionRectanglePainter(
+                                                            selectionRectangle,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
                                           if (t != null &&
+                                              !planReadOnly &&
+                                              !rotationModeActive &&
                                               canResizePlanObject(t) &&
                                               !measuring)
                                             ...objectResizeHandles(t, scale),
+                                          ...annotationResizeHandles(scale),
+                                          ...planRotationControls(scale),
                                           if (measuring)
                                             Positioned.fill(
                                               child: GestureDetector(
@@ -5633,21 +7062,17 @@ class _HomeState extends State<Home> {
                                                 ),
                                                 behavior:
                                                     HitTestBehavior.opaque,
-                                                onTapDown: (details) =>
-                                                    setState(() {
-                                                      final point =
-                                                          details
-                                                              .localPosition /
-                                                          scale;
-                                                      if (measureStart ==
-                                                              null ||
-                                                          measureEnd != null) {
-                                                        measureStart = point;
-                                                        measureEnd = null;
-                                                      } else {
-                                                        measureEnd = point;
-                                                      }
-                                                    }),
+                                                onTapDown: (d) => setState(() {
+                                                  final point =
+                                                      d.localPosition / scale;
+                                                  if (measureStart == null ||
+                                                      measureEnd != null) {
+                                                    measureStart = point;
+                                                    measureEnd = null;
+                                                  } else {
+                                                    measureEnd = point;
+                                                  }
+                                                }),
                                                 child: CustomPaint(
                                                   painter: DistancePainter(
                                                     measureStart,
@@ -5657,7 +7082,7 @@ class _HomeState extends State<Home> {
                                                 ),
                                               ),
                                             ),
-                                        ],
+                                        ]),
                                       ),
                                     ),
                                   ),
@@ -5672,163 +7097,188 @@ class _HomeState extends State<Home> {
                 ),
               ),
               SizedBox(
-                width: 250,
+                width: showLegend ? 250 : 165,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(10, 0, 20, 16),
-                  child: ListView(
+                  child: SingleChildScrollView(
                     key: const ValueKey('plan-sidebar'),
-                    scrollCacheExtent: const ScrollCacheExtent.pixels(2000),
-                    children: [
-                      if (measuring)
-                        Text(
-                          measureEnd == null
-                              ? 'Cliquer deux points du plan pour mesurer.'
-                              : 'Distance : ${(measureEnd! - measureStart!).distance.toStringAsFixed(2)} m',
+                    padding: EdgeInsets.zero,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.tonal(
+                            key: const ValueKey('plan-arrange-button'),
+                            onPressed: arranging || planReadOnly
+                                ? null
+                                : arrangeWithOptions,
+                            child: arranging
+                                ? const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                      SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text('Disposition en cours…'),
+                                      ),
+                                    ],
+                                  )
+                                : const Text('Disposer mobilier'),
+                          ),
                         ),
-                      const Text(
-                        'Légende',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (parcoursActive(p!)) ...[
-                        CheckboxListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('Afficher le parcours proposé'),
-                          subtitle:
-                              !parcoursCurrent(p!) &&
-                                  parcoursPaths(p!, allowStale: true).isNotEmpty
-                              ? const Text(
-                                  'Dernier tracé en pointillés : plan modifié, à recalculer.',
-                                )
-                              : parcoursPaths(p!, allowStale: true).isEmpty
-                              ? const Text(
-                                  'Aucun tracé disponible. Relancer la disposition et vérifier les messages.',
-                                )
-                              : null,
-                          value: p!['showParcours'] != false,
-                          onChanged: (v) =>
-                              change(() => p!['showParcours'] = v!),
-                        ),
-                        const Text(
-                          'Trait bleu : passage visiteurs. Les espaces entre les rangées sont réservés aux exposants.',
-                        ),
-                        if (parcoursWarnings(p!).isNotEmpty)
-                          Text(
-                            parcoursWarnings(p!).join('\n'),
+                        if (showLegend) ...[
+                          if (measuring)
+                            Text(
+                              measureEnd == null
+                                  ? 'Cliquer deux points pour mesurer.'
+                                  : 'Distance : ${(measureEnd! - measureStart!).distance.toStringAsFixed(2)} m',
+                            ),
+                          const Text(
+                            'Légende',
                             style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                        const SizedBox(height: 8),
-                      ],
-                      ...[
-                        (const Color(0xffd7ddda), 'Vide'),
-                        (const Color(0xffffd9ad), 'Partiellement occupée'),
-                        (const Color(0xffa9d8bf), 'Pleine'),
-                      ].map(
-                        (state) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 3),
-                          child: Row(
-                            children: [
-                              Container(width: 18, height: 12, color: state.$1),
-                              const SizedBox(width: 8),
-                              Expanded(child: Text(state.$2)),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.warning_amber, color: Colors.red),
-                        title: Text('Rouge : conflit de place ou de couloir'),
-                      ),
-                      if (conflicts.isNotEmpty)
-                        Text(
-                          '${conflicts.length} tables en conflit. Voir Contrôles.',
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                      ...markerNames.map(
-                        (name) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 3),
-                          child: Row(
-                            children: [
-                              PlanMarker(
-                                name: name,
-                                color: markerColors[name]!,
-                                size: 16,
+                          if (parcoursActive(p!)) ...[
+                            if (!parcoursCurrent(p!))
+                              Text(
+                                parcoursPaths(p!, allowStale: true).isEmpty
+                                    ? 'Aucun tracé disponible.'
+                                    : 'Dernier tracé en pointillés. Vous pouvez recalculer le parcours ou garder le plan actuel.',
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(child: Text(name)),
-                            ],
+                            if (!parcoursCurrent(p!))
+                              TextButton(
+                                onPressed: arrangeWithOptions,
+                                child: const Text('Recalculer… (facultatif)'),
+                              ),
+                            const Text(
+                              'Trait bleu : passage visiteurs. Les espaces entre les rangées sont réservés aux exposants.',
+                            ),
+                            if (parcoursWarnings(p!).isNotEmpty)
+                              Text(
+                                parcoursWarnings(p!).join('\n'),
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                              ),
+                            const SizedBox(height: 8),
+                          ],
+                          ...[
+                            (const Color(0xffd7ddda), 'Vide'),
+                            (const Color(0xffffd9ad), 'Partiellement occupée'),
+                            (const Color(0xffa9d8bf), 'Pleine'),
+                          ].map(
+                            (state) => Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 3),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 18,
+                                    height: 12,
+                                    color: state.$1,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(child: Text(state.$2)),
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8),
-                        child: Text(
-                          'Repères des groupes attribués. Pour un groupe réparti, vérifier les personnes à chaque table. PMR : accès à vérifier sur place.',
-                        ),
-                      ),
-                      const Divider(),
-                      const Text(
-                        'Sélection',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (t == null)
-                        const Text(
-                          'Cliquer un objet. Double-clic pour modifier ses dimensions et sa position.',
-                        ),
-                      if (t != null) ...[
-                        Text(
-                          '${t['label']}',
-                          style: const TextStyle(fontSize: 22),
-                        ),
-                        Text(
-                          '${t['w']} × ${t['h']} m\nX ${number(t['x']).toStringAsFixed(2)} / Y ${number(t['y']).toStringAsFixed(2)}',
-                        ),
-                        if (t['kind'] == 'table')
-                          Text(
-                            '${t['seating']} • ${t['sides']}\n${geometry.capacity(t)} places utilisables / ${t['capacity']} déclarées\n${(geometry.blocked[t['id']] ?? {}).isEmpty ? '' : 'Faces accolées sans assises : ${(geometry.blocked[t['id']] ?? {}).map((s) => {'left': 'gauche', 'right': 'droite', 'top': 'haut', 'bottom': 'bas'}[s]).join(', ')}'}',
+                          const ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(
+                              Icons.warning_amber,
+                              color: Colors.red,
+                            ),
+                            title: Text(
+                              'Rouge : conflit de place ou de couloir',
+                            ),
                           ),
-                        if (selectedTables.length > 1)
-                          Text('${selectedTables.length} tables sélectionnées'),
-                        if ((t['note'] ?? '').toString().isNotEmpty)
-                          Text('Note : ${t['note']}'),
-                        TextButton(
-                          onPressed: () async {
-                            if (await confirm(
-                              'Retirer cet objet ?',
-                              'Les attributions liées à cette table seront retirées.',
-                            )) {
-                              change(() {
-                                rows(p!, 'items').remove(t);
-                                for (final g in rows(p!, 'groups')) {
-                                  (g['alloc'] as List).removeWhere(
-                                    (a) => a['table'] == t['id'],
-                                  );
-                                  if (g['reserved'] == t['id']) {
-                                    g['reserved'] = '';
-                                  }
-                                }
-                                selected = null;
-                              });
-                            }
-                          },
-                          child: const Text('Retirer'),
-                        ),
+                          for (final id in conflicts)
+                            TextButton(
+                              onPressed: () => focusPlanItem(
+                                rows(
+                                  p!,
+                                  'items',
+                                ).firstWhere((i) => i['id'] == id),
+                              ),
+                              child: Text(
+                                'Conflit : ${rows(p!, 'items').firstWhere((i) => i['id'] == id)['label']}',
+                              ),
+                            ),
+                          ...markerNames.map(
+                            (name) => Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 3),
+                              child: Row(
+                                children: [
+                                  PlanMarker(
+                                    name: name,
+                                    color: markerColors[name]!,
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(child: Text(name)),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 8),
+                            child: Text(
+                              'Repères des groupes attribués. Pour un groupe réparti, vérifier les personnes à chaque table. PMR : accès à vérifier sur place.',
+                            ),
+                          ),
+                          const Divider(),
+                          const Text(
+                            'Sélection',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          if (t == null)
+                            const Text(
+                              'Cliquer un objet. Double-clic pour modifier ses dimensions et sa position.',
+                            ),
+                          if (t != null) ...[
+                            Text(
+                              '${t['label']}',
+                              style: const TextStyle(fontSize: 22),
+                            ),
+                            Text(
+                              '${t['w']} × ${t['h']} m\nX ${number(t['x']).toStringAsFixed(2)} / Y ${number(t['y']).toStringAsFixed(2)}',
+                            ),
+                            if (t['kind'] == 'table')
+                              Text(
+                                '${t['seating']} • ${t['sides']}\n${geometry.capacity(t)} places utilisables / ${t['capacity']} déclarées\n${(geometry.blocked[t['id']] ?? {}).isEmpty ? '' : 'Faces accolées sans assises : ${(geometry.blocked[t['id']] ?? {}).map((s) => {'left': 'gauche', 'right': 'droite', 'top': 'haut', 'bottom': 'bas'}[s]).join(', ')}'}',
+                              ),
+                            if (selectedTables.length > 1)
+                              Text(
+                                '${selectedTables.length} tables sélectionnées',
+                              ),
+                            if ((t['note'] ?? '').toString().isNotEmpty)
+                              Text('Note : ${t['note']}'),
+                            TextButton(
+                              onPressed: removePlanSelection,
+                              child: const Text('Retirer mobilier'),
+                            ),
+                          ],
+                          const Divider(),
+                          const Text(
+                            'Molette : zoom. Couleurs des tables : occupation. Gris : obstacles. Bleu : zones. Accès libellés en clair.\nÉcart entre tables mesuré bord à bord, une seule fois. Assises contrôlées aux limites de salle. Pas de distance imposée avec les autres objets ; chevauchements signalés.',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ],
                       ],
-                      const Divider(),
-                      const Text(
-                        'Molette : zoom. Couleurs des tables : occupation. Gris : obstacles. Bleu : zones. Accès libellés en clair.\nÉcart entre tables mesuré bord à bord, une seule fois. Assises contrôlées aux limites de salle. Pas de distance imposée avec les autres objets ; chevauchements signalés.',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -5842,7 +7292,7 @@ class _HomeState extends State<Home> {
   Widget inventory() => Column(
     children: [
       heading(
-        'Mobilier privé',
+        'Mobilier',
         'Stock et dimensions par type, réservés à cet événement.',
         [
           FilledButton(
@@ -5852,12 +7302,10 @@ class _HomeState extends State<Home> {
           const SizedBox(width: 8),
           FilledButton.tonal(
             onPressed: () => addTables(
-              rows(p!, 'types')
-                  .where((t) => t['shape'] != 'banc' && t['enabled'] == true)
-                  .toList(),
+              rows(p!, 'types').where((t) => t['enabled'] == true).toList(),
               all: true,
             ),
-            child: const Text('Ajouter toutes les tables sélectionnées'),
+            child: const Text('Ajouter tout le mobilier sélectionné'),
           ),
         ],
       ),
@@ -5895,7 +7343,11 @@ class _HomeState extends State<Home> {
                     '${t['name']} • ${t['shape']} • ${t['w']} × ${t['h']} m',
                   ),
                   subtitle: Text(
-                    '${t['source']} • ${t['capacity']} places • ${t['seating']}\n${rows(p!, 'items').where((i) => i['type'] == t['id']).length} utilisées / ${t['limit']} autorisées / ${t['quantity']} disponibles',
+                    '${t['source']} • ${t['shape'] == 'banc'
+                        ? (max(number(t['w']), number(t['h'])) / number(eventComfort(p!)['benchSeatWidth'])).floor()
+                        : ['chaise', 'chaise enfant', 'emplacement PMR'].contains(t['shape'])
+                        ? 1
+                        : t['capacity']} places • ${t['shape'] == 'banc' ? 'selon Confort' : t['seating']}\n${rows(p!, 'items').where((i) => i['type'] == t['id']).length} utilisées / ${t['limit']} autorisées / ${t['quantity']} disponibles',
                   ),
                   isThreeLine: true,
                   trailing: Wrap(
@@ -5908,11 +7360,10 @@ class _HomeState extends State<Home> {
                         onPressed: () => addTable(t),
                         child: const Text('Ajouter au plan'),
                       ),
-                      if (t['shape'] != 'banc')
-                        TextButton(
-                          onPressed: () => addTables([t], all: true),
-                          child: const Text('Ajouter tout'),
-                        ),
+                      TextButton(
+                        onPressed: () => addTables([t], all: true),
+                        child: const Text('Ajouter tout'),
+                      ),
                     ],
                   ),
                 ),
@@ -5985,7 +7436,9 @@ class _HomeState extends State<Home> {
                             children: [
                               Expanded(
                                 child: Text(
-                                  '${g['name']} • ${g['count']} personnes',
+                                  isStandBooking(g)
+                                      ? '${g['name']} • ${g['standUnit'] == 'Mètres linéaires' ? '${g['requestedMetres']} m' : '${g['requestedTables'] ?? 1} tables'}'
+                                      : '${g['name']} • ${g['count']} personnes',
                                 ),
                               ),
                               TextButton(
@@ -6027,20 +7480,33 @@ class _HomeState extends State<Home> {
     key: const ValueKey('reservations-list'),
     padding: EdgeInsets.zero,
     children: [
-      heading('Réservations', 'Groupes par référent, sans noms individuels.', [
-        TextButton(
-          onPressed: () async {
-            final v = await ask(
-              'Repas personnalisé',
-              '',
-              label: 'Nom du repas',
-            );
-            if (v != null && !(p!['meals'] as List).contains(v)) {
-              change(() => (p!['meals'] as List).add(v));
-            }
-          },
-          child: const Text('+ Repas'),
+      if (freeSeating(p!))
+        const Padding(
+          padding: EdgeInsets.all(20),
+          child: Text(
+            'Placement libre : capacité vérifiée, sans attribution automatique. Les préférences de proximité sont conservées pour un futur placement attribué. Les places réservées manuellement restent occupées.',
+          ),
         ),
+      if (rows(p!, 'groups').any(isStandBooking))
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: Text(standSummaryLabel(p!)),
+        ),
+      heading('Réservations', 'Groupes par référent, sans noms individuels.', [
+        if (mealsEnabled(p!))
+          TextButton(
+            onPressed: () async {
+              final v = await ask(
+                'Repas personnalisé',
+                '',
+                label: 'Nom du repas',
+              );
+              if (v != null && !(p!['meals'] as List).contains(v)) {
+                change(() => (p!['meals'] as List).add(v));
+              }
+            },
+            child: const Text('+ Repas'),
+          ),
         FilledButton(
           onPressed: () => groupEdit(),
           child: const Text('+ Groupe'),
@@ -6087,7 +7553,10 @@ class _HomeState extends State<Home> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${allocationSummary(p!)['assigned']} / ${allocationSummary(p!)['requested']} personnes attribuées. Préparer le mobilier et les passages dans Plan de salle ; corriger chaque groupe avec Tables. Les attributions verrouillées restent conservées.',
+                  rows(p!, 'groups').isNotEmpty &&
+                          rows(p!, 'groups').every(isStandBooking)
+                      ? '${standSummaryLabel(p!)} Préparer les tables de stand dans Plan de salle ; corriger chaque réservation avec Stand. Les attributions verrouillées restent conservées.'
+                      : '${allocationSummary(p!)['assigned']} / ${allocationSummary(p!)['requested']} personnes attribuées. Préparer le mobilier et les passages dans Plan de salle ; corriger chaque groupe avec Tables. Les attributions verrouillées restent conservées.',
                   style: const TextStyle(fontSize: 12),
                 ),
               ],
@@ -6100,24 +7569,27 @@ class _HomeState extends State<Home> {
         child: TextField(
           decoration: const InputDecoration(
             prefixIcon: Icon(Icons.search),
-            labelText: 'Rechercher un référent → sa table',
+            labelText: 'Rechercher un groupe, une personne ou un contact',
           ),
           onChanged: (v) => setState(() => search = v),
         ),
       ),
+      reservationFilterBar(),
       const SizedBox(height: 12),
       ...rows(
         p!,
         'groups',
-      ).where((g) => g['name'].toString().toLowerCase().contains(search.toLowerCase())).map((
+      ).where((g) => reservationMatchesFilter(p!, g, reservationFilter, search)).map((
         g,
       ) {
-        final places = (g['alloc'] as List)
-            .map((a) {
-              final t = tables(p!).where((t) => t['id'] == a['table']);
-              return '${t.isEmpty ? 'Table absente' : t.first['label']} (${a['count']})';
-            })
-            .join(', ');
+        final places = isStandBooking(g)
+            ? standAllocationText(p!, g)
+            : (g['alloc'] as List)
+                  .map((a) {
+                    final t = tables(p!).where((t) => t['id'] == a['table']);
+                    return '${t.isEmpty ? 'Table absente' : t.first['label']} (${a['count']})';
+                  })
+                  .join(', ');
         return Card(
           margin: const EdgeInsets.fromLTRB(20, 4, 20, 4),
           child: Padding(
@@ -6138,6 +7610,8 @@ class _HomeState extends State<Home> {
                         ),
                       ),
                       Text(places.isEmpty ? 'Sans attribution' : places),
+                      if ((g['childChairs'] as int? ?? 0) > 0)
+                        Text('Chaises enfant : ${g['childChairs']}'),
                       if ((g['note'] ?? '').toString().isNotEmpty)
                         Text('Note : ${g['note']}'),
                       Builder(
@@ -6151,7 +7625,9 @@ class _HomeState extends State<Home> {
                             (g['count'] as int) - assigned,
                           );
                           return Text(
-                            '${g['count']} personnes réservées • $assigned attribuées • $remaining à placer',
+                            isStandBooking(g)
+                                ? '${g['count']} personnes présentes (information) • ${standAllocationText(p!, g)}'
+                                : '${g['count']} personnes réservées • $assigned attribuées • $remaining à placer',
                             style: TextStyle(
                               color: remaining > 0 ? Colors.deepOrange : null,
                             ),
@@ -6159,7 +7635,7 @@ class _HomeState extends State<Home> {
                         },
                       ),
                       Text(
-                        '${mealsEnabled(p!) ? '${g['meal']} • ' : ''}${g['needs']} ${g['allergy']}',
+                        '${mealsEnabled(p!) ? '${g['meal']} • ' : ''}${g['needs']}${mealsEnabled(p!) ? ' ${g['allergy']}' : ''}',
                       ),
                       if (reservationPreferences(p!, g).isNotEmpty)
                         Text(
@@ -6173,6 +7649,19 @@ class _HomeState extends State<Home> {
                               })
                               .join(' • '),
                         ),
+                      if (g['waiting'] == true)
+                        const Text(
+                          'Liste d’attente — non attribuée automatiquement',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      if (similarReservations(p!, g).isNotEmpty)
+                        Text(
+                          'Nom ou contact similaire : ${similarReservations(p!, g).map((v) => v['name']).join(', ')}',
+                        ),
+                      ...reservationAllocationReasons(p!, g).map(
+                        (reason) =>
+                            Text(reason, style: const TextStyle(fontSize: 12)),
+                      ),
                       if ((g['seats'] as List? ?? []).isNotEmpty)
                         Text(
                           '${(g['seats'] as List).length} places anonymes détaillées ; vérifier la liaison aux tables.',
@@ -6192,40 +7681,59 @@ class _HomeState extends State<Home> {
                     ],
                   ),
                 ),
-                Wrap(
-                  children: [
-                    TextButton(
-                      onPressed: () => groupEdit(g),
-                      child: const Text('Modifier'),
-                    ),
-                    TextButton(
-                      onPressed: () => anonymousSeats(g),
-                      child: const Text('Besoins et repas'),
-                    ),
-                    TextButton(
-                      onPressed: () => proximityEdit(g),
-                      child: const Text('Proximité'),
-                    ),
-                    TextButton(
-                      onPressed: () => allocationEdit(g),
-                      child: const Text('Tables'),
-                    ),
-                    Tooltip(
-                      message: 'Supprimer le groupe',
-                      child: TextButton.icon(
-                        onPressed: () async {
-                          if (await confirm(
-                            'Supprimer ${g['name']} ?',
-                            '1 groupe, ${g['count']} personne(s). Besoins, repas et attributions de ce groupe supprimés ; salle et tables conservées.',
-                          )) {
-                            change(() => removeReservation(p!, g['id']));
-                          }
-                        },
-                        icon: const Icon(Icons.delete_outline),
-                        label: const Text('Supprimer'),
+                SizedBox(
+                  width: 360,
+                  child: Wrap(
+                    children: [
+                      TextButton(
+                        onPressed: () => groupEdit(g),
+                        child: const Text('Modifier'),
                       ),
-                    ),
-                  ],
+                      TextButton(
+                        onPressed: () => anonymousSeats(g),
+                        child: const Text('Préférences'),
+                      ),
+                      TextButton(
+                        onPressed: () => proximityEdit(g),
+                        child: const Text('Proximité'),
+                      ),
+                      TextButton(
+                        onPressed: g['waiting'] == true
+                            ? null
+                            : () => allocationEdit(g),
+                        child: const Text('Tables'),
+                      ),
+                      TextButton(
+                        onPressed: () => waitingStatusEditor(g),
+                        child: Text(
+                          g['waiting'] == true
+                              ? 'Confirmer la réservation'
+                              : 'Mettre en attente',
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: g['waiting'] == true
+                            ? null
+                            : () => swapReservationsEditor(g),
+                        child: const Text('Échanger…'),
+                      ),
+                      Tooltip(
+                        message: 'Supprimer le groupe',
+                        child: TextButton.icon(
+                          onPressed: () async {
+                            if (await confirm(
+                              'Supprimer ${g['name']} ?',
+                              '1 groupe, ${g['count']} personne(s). Besoins, repas et attributions de ce groupe supprimés ; salle et tables conservées.',
+                            )) {
+                              change(() => removeReservation(p!, g['id']));
+                            }
+                          },
+                          icon: const Icon(Icons.delete_outline),
+                          label: const Text('Supprimer'),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -6315,69 +7823,92 @@ class _HomeState extends State<Home> {
           children: [
             ...projects.map(
               (v) => Card(
-                child: ListTile(
-                  selected: v['id'] == p!['id'],
-                  title: Text(v['name']),
-                  subtitle: Text(
-                    '${v['room']['name']} • ${rows(v, 'groups').length} groupes',
-                  ),
-                  onTap: () => setState(() {
-                    p = v;
-                    selected = null;
-                    undo.clear();
-                    redo.clear();
-                    transform.value = Matrix4.identity();
-                  }),
-                  trailing: Wrap(
-                    children: [
-                      TextButton(
-                        onPressed: () => comfortEdit(v),
-                        child: const Text('Confort'),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ListTile(
+                      selected: v['id'] == p!['id'],
+                      leading: Icon(
+                        eventIcon(v),
+                        semanticLabel: eventIconName(v),
                       ),
-                      TextButton(
-                        onPressed: () => eventProperties(v),
-                        child: const Text('Propriétés'),
+                      title: Text(v['name']),
+                      subtitle: Text(
+                        '${v['room']['name']} • ${rows(v, 'groups').length} groupes',
                       ),
-                      TextButton(
-                        onPressed: () async {
-                          final name = await ask(
-                            'Dupliquer la configuration',
-                            '${v['name']} • copie',
-                          );
-                          if (name == null) return;
-                          final copy = clone(v);
-                          copy['id'] = uid();
-                          copy['name'] = name;
-                          copy['groups'] = <Json>[];
-                          copy['history'] = <Json>[];
-                          await widget.store.save(copy);
-                          setState(() {
-                            projects.add(copy);
-                            p = copy;
-                            selected = null;
-                            undo.clear();
-                            redo.clear();
-                          });
-                        },
-                        child: const Text('Dupliquer sans réservations'),
+                      onTap: () => setState(() {
+                        p = v;
+                        selected = null;
+                        selectedObjects.clear();
+                        selectedTables.clear();
+                        undo.clear();
+                        redo.clear();
+                        transform.value = Matrix4.identity();
+                      }),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                      child: Wrap(
+                        children: [
+                          TextButton(
+                            onPressed:
+                                v['eventLocked'] == true ||
+                                    v['planLocked'] == true
+                                ? null
+                                : () => comfortEdit(v),
+                            child: const Text('Confort'),
+                          ),
+                          TextButton(
+                            onPressed: v['eventLocked'] == true
+                                ? null
+                                : () => eventProperties(v),
+                            child: const Text('Propriétés'),
+                          ),
+                          TextButton(
+                            onPressed: () async {
+                              final name = await ask(
+                                'Dupliquer la configuration',
+                                '${v['name']} • copie',
+                              );
+                              if (name == null) return;
+                              final copy = clone(v);
+                              copy['eventLocked'] = false;
+                              copy['id'] = uid();
+                              copy['name'] = name;
+                              copy['groups'] = <Json>[];
+                              copy['history'] = <Json>[];
+                              await widget.store.save(copy);
+                              setState(() {
+                                projects.add(copy);
+                                p = copy;
+                                selected = null;
+                                undo.clear();
+                                redo.clear();
+                              });
+                            },
+                            child: const Text('Dupliquer sans réservations'),
+                          ),
+                          TextButton.icon(
+                            onPressed: v['eventLocked'] == true
+                                ? null
+                                : () async {
+                                    if (!await confirm(
+                                      'Supprimer ${v['name']} ?',
+                                      'Toutes les données de cet événement seront supprimées de la base locale. Les copies exportées restent sous votre contrôle.',
+                                    )) {
+                                      return;
+                                    }
+                                    await pending;
+                                    await widget.store.delete(v['id']);
+                                    await load();
+                                  },
+                            icon: const Icon(Icons.delete_outline),
+                            label: const Text('Supprimer'),
+                          ),
+                        ],
                       ),
-                      TextButton.icon(
-                        onPressed: () async {
-                          if (!await confirm(
-                            'Supprimer ${v['name']} ?',
-                            'Toutes les données de cet événement seront supprimées de la base locale. Les copies exportées restent sous votre contrôle.',
-                          )) {
-                            return;
-                          }
-                          await pending;
-                          await widget.store.delete(v['id']);
-                          await load();
-                        },
-                        icon: const Icon(Icons.delete_outline),
-                        label: const Text('Supprimer'),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -6457,12 +7988,6 @@ class _HomeState extends State<Home> {
             const Divider(),
             SelectableText(
               'Données : ${widget.store.directory}\nLes données des événements restent sur cet ordinateur. La vérification des versions contacte GitHub sans transmettre vos événements. Aucun compte requis. La conservation des exports relève de votre organisation. Définir une durée appropriée selon votre contexte.',
-            ),
-            TextButton(
-              onPressed: resetReservations,
-              child: const Text(
-                'Effacer les données de réservation de cet événement',
-              ),
             ),
           ],
         ),
@@ -6616,7 +8141,7 @@ class ItemPainter extends CustomPainter {
     final color = item['unplacedByArrangement'] == true && conflict
         ? const Color(0xffffcccc)
         : switch (item['kind']) {
-            'table' =>
+            'table' || 'chair' || 'bench' || 'pmr' =>
               occupied == 0
                   ? const Color(0xffd7ddda)
                   : occupied < capacity

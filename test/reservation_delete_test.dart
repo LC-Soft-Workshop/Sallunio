@@ -68,9 +68,22 @@ void main() {
       await tester.tap(find.text('Réservations').first);
       await tester.pumpAndSettle();
       Future<void> removePlace() async {
-        await tester.ensureVisible(find.text('Besoins et repas'));
+        await tester.scrollUntilVisible(
+          find.text('Préférences'),
+          150,
+          scrollable: find
+              .descendant(
+                of: find.byKey(const ValueKey('reservations-list')),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await Scrollable.ensureVisible(
+          tester.element(find.widgetWithText(TextButton, 'Préférences')),
+          alignment: .5,
+        );
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Besoins et repas'));
+        await tester.tap(find.text('Préférences'));
         await tester.pumpAndSettle();
         await tester.ensureVisible(
           find.byTooltip('Retirer la place anonyme 2'),
@@ -275,7 +288,20 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Réservations').first);
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.byTooltip('Supprimer le groupe'));
+      await tester.scrollUntilVisible(
+        find.byTooltip('Supprimer le groupe'),
+        150,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('reservations-list')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await Scrollable.ensureVisible(
+        tester.element(find.byTooltip('Supprimer le groupe')),
+        alignment: .5,
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Supprimer le groupe'));
       await tester.pumpAndSettle();

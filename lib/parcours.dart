@@ -5,6 +5,27 @@ import 'dart:math';
 import 'domain.dart';
 
 const parcoursCirculations = ['Fermé', 'Ouvert'];
+String? parcoursFurnitureError(Json p) {
+  final candidates = tables(p).where(
+    (t) =>
+        t['kind'] == 'table' &&
+        t['fixed'] != true &&
+        t['capacity'] != 0 &&
+        t['usage'] != 'Places assises' &&
+        furnitureUse(t) != 'Service',
+  );
+  if (candidates.isNotEmpty) return null;
+  if (tables(p).any(
+    (t) =>
+        t['kind'] == 'table' &&
+        t['usage'] == 'Places assises' &&
+        t['capacity'] != 0,
+  )) {
+    return 'Aucune table de stand disponible pour le parcours. Les tables marquées « Places assises » sont exclues. Dans les propriétés des tables destinées aux exposants, choisir l’usage « Stand / exposition », puis relancer la disposition. Le plan actuel est conservé.';
+  }
+  return 'Aucune table de stand disponible pour le parcours. Ajouter des tables de stand non fixées ; les chaises, bancs, tables de service et positions fixées sont exclus. Le plan actuel est conservé.';
+}
+
 bool parcoursClosed(Json p) {
   final settings = p['parcoursSettings'] as Map? ?? {};
   if (settings['circulation'] != null) {
@@ -84,7 +105,7 @@ String parcoursSignature(Json p) => jsonEncode([
   p['joinGap'],
   p['joinGapSides'],
   for (final t in rows(p, 'types')) [t['id'], t['joinGap'], t['joinGapSides']],
-  for (final i in rows(p, 'items'))
+  for (final i in physicalPlanItems(p))
     [
       i['id'],
       i['kind'],
@@ -159,7 +180,7 @@ List<String> parcoursWarnings(Json p) {
   if (!parcoursActive(p) || p['parcoursPlan'] == null) return [];
   if (!parcoursCurrent(p)) {
     return [
-      'Parcours : plan modifié, relancer Disposer tables pour vérifier les accès.',
+      'Parcours : plan modifié, relancer Disposer mobilier pour vérifier les accès.',
     ];
   }
   final warnings = (p['parcoursPlan']['warnings'] as List)
@@ -271,7 +292,12 @@ bool parcoursInternalContact(Json p, Json a, Json b) {
 void clearParcoursLayout(Json p) {
   for (final t in tables(p)) {
     final saved = t.remove('parcoursOriginal');
-    if (saved is Map && t['fixed'] != true && t['capacity'] != 0) {
+    if (saved is Map &&
+        t['fixed'] != true &&
+        t['kind'] == 'table' &&
+        t['capacity'] != 0 &&
+        t['usage'] != 'Places assises' &&
+        furnitureUse(t) != 'Service') {
       for (final key in ['w', 'h', 'rotation', 'sides', 'seatSide']) {
         if (saved.containsKey(key)) {
           t[key] = saved[key];
@@ -303,7 +329,7 @@ Json _transpose(Json p) {
   if (polygon.isNotEmpty) {
     room['polygon'] = polygon.map((v) => '${v.y},${v.x}').join(';');
   }
-  for (final i in rows(q, 'items')) {
+  for (final i in physicalPlanItems(q)) {
     final x = i['x'], w = i['w'];
     i['x'] = i['y'];
     i['y'] = x;
@@ -344,7 +370,7 @@ class _Layout {
 Json _reflectProject(Json source, bool vertical) {
   final p = clone(source),
       extent = number(p['room'][vertical ? 'height' : 'width']);
-  for (final item in rows(p, 'items')) {
+  for (final item in physicalPlanItems(p)) {
     final coordinate = vertical ? 'y' : 'x', size = vertical ? 'h' : 'w';
     item[coordinate] = extent - number(item[coordinate]) - number(item[size]);
     if (number(item[coordinate]).abs() < .00001) item[coordinate] = 0.0;
@@ -398,17 +424,19 @@ List<(Json, Json)> _packPairs(
   for (final t in candidates) {
     final oriented = _rowOrientation(t);
     final key =
-        '${max(number(t['w']), number(t['h'])).toStringAsFixed(6)}:${min(number(t['w']), number(t['h'])).toStringAsFixed(6)}:'
+        '${standTypeKey(t)}:${max(number(t['w']), number(t['h'])).toStringAsFixed(6)}:${min(number(t['w']), number(t['h'])).toStringAsFixed(6)}:'
         '${tableJoinEdgeGap(p, oriented, 'left')}:${tableJoinEdgeGap(p, oriented, 'right')}';
     groups.putIfAbsent(key, () => []).add(t);
   }
   final options = <(Json, Json)>[];
   for (final bucket in groups.values) {
-    bucket.sort(
-      (a, b) =>
-          seatEnvelope(comfortTable(p, a))
-              .compareTo(seatEnvelope(comfortTable(p, b))),
-    );
+    bucket.sort((a, b) {
+      final model = compareStandModels(a, b);
+      if (model != 0) return model;
+      final envelope = seatEnvelope(comfortTable(p, a))
+          .compareTo(seatEnvelope(comfortTable(p, b)));
+      return envelope != 0 ? envelope : compareFurnitureNumbers(a, b);
+    });
     for (var i = 0; i + 1 < bucket.length; i += 2) {
       if (seatEnvelope(comfortTable(p, bucket[i])) +
               seatEnvelope(comfortTable(p, bucket[i + 1])) <=
@@ -491,9 +519,21 @@ _Layout _build(
       singleEntrance.length == 1 && singleEntrance.single['kind'] == 'entry';
   final width = number(p['room']['width']),
       height = number(p['room']['height']);
-  final movable = tables(p)
-      .where((t) => t['fixed'] != true && t['capacity'] != 0)
-      .toList();
+  final movable =
+      tables(p)
+          .where(
+            (t) =>
+                t['fixed'] != true &&
+                t['kind'] == 'table' &&
+                t['capacity'] != 0 &&
+                t['usage'] != 'Places assises' &&
+                furnitureUse(t) != 'Service',
+          )
+          .toList()
+        ..sort((a, b) {
+          final model = compareStandModels(a, b);
+          return model != 0 ? model : compareFurnitureNumbers(a, b);
+        });
   final pool = movable
       .where((t) => t['shape'] != 'cercle')
       .take(tableLimit ?? movable.length)
@@ -507,7 +547,7 @@ _Layout _build(
       .reduce(max);
   final strip = depth * 2 + gap;
   final joinReserve = _largestJoinGap(p);
-  final obstacles = rows(p, 'items')
+  final obstacles = physicalPlanItems(p)
       .where(
         (i) => i['kind'] != 'table' || i['fixed'] == true || i['capacity'] == 0,
       )
@@ -593,7 +633,7 @@ _Layout _build(
       });
     q.remove('unplacedByArrangement');
     if (role == 'wall' &&
-        rows(p, 'items')
+        physicalPlanItems(p)
             .where((i) => ['entry', 'exit', 'door'].contains(i['kind']))
             .any((i) => overlaps(q, i, aisle))) {
       return false;
@@ -632,12 +672,13 @@ _Layout _build(
         );
     var y = spineStart;
     final available = [...pool]
-      ..sort(
-        (a, b) => max(
+      ..sort((a, b) {
+        final size = max(
           number(b['w']),
           number(b['h']),
-        ).compareTo(max(number(a['w']), number(a['h']))),
-      );
+        ).compareTo(max(number(a['w']), number(a['h'])));
+        return size != 0 ? size : compareFurnitureNumbers(a, b);
+      });
     Json? previous;
     for (final t in available) {
       final long = max(number(t['w']), number(t['h'])),
@@ -798,9 +839,7 @@ _Layout _build(
             number(a['w']),
             number(a['h']),
           ).compareTo(min(number(b['w']), number(b['h'])));
-          return depth != 0
-              ? depth
-              : a['id'].toString().compareTo(b['id'].toString());
+          return depth != 0 ? depth : compareFurnitureNumbers(a, b);
         });
         caps.add(compatibleCaps.removeAt(0));
       }
@@ -836,17 +875,21 @@ _Layout _build(
         lo = max(lo, number(headAccess['x']) + aisle + capWidth + joinReserve);
       }
       final candidates = pool.where((t) => !caps.contains(t)).toList();
-      candidates.sort(
-        (a, b) => max(
+      candidates.sort((a, b) {
+        final size = max(
           number(b['w']),
           number(b['h']),
-        ).compareTo(max(number(a['w']), number(a['h']))),
-      );
+        ).compareTo(max(number(a['w']), number(a['h'])));
+        return size != 0 ? size : compareFurnitureNumbers(a, b);
+      });
       final pairs = _packPairs(p, candidates, hi - lo, gap, pairLimit);
       if (pairs.isEmpty) continue;
       double pairDepth((Json, Json) pair) =>
           min(number(pair.$1['w']), number(pair.$1['h']));
-      pairs.sort((a, b) => pairDepth(b).compareTo(pairDepth(a)));
+      pairs.sort((a, b) {
+        final depth = pairDepth(b).compareTo(pairDepth(a));
+        return depth != 0 ? depth : compareFurnitureNumbers(a.$1, b.$1);
+      });
       if (attachLeft) {
         pairs.add(pairs.removeAt(0));
       } else if (!attachRight && pairs.length > 1) {
@@ -1046,7 +1089,7 @@ class _PublicGrid {
     final aisle = eventCirculation(p);
     radius = aisle / 2;
     step = min(.25, aisle / 4);
-    blockers = rows(p, 'items')
+    blockers = physicalPlanItems(p)
         .where(
           (i) =>
               !['entry', 'exit', 'door'].contains(i['kind']) &&
@@ -1303,7 +1346,10 @@ List<Json> _unservedFronts(_PublicGrid grid, List<int> walk) =>
     tables(grid.p)
         .where(
           (t) =>
+              t['kind'] == 'table' &&
               t['capacity'] != 0 &&
+              t['usage'] != 'Places assises' &&
+              furnitureUse(t) != 'Service' &&
               t['unplacedByArrangement'] != true &&
               t['parcoursBlock'] != null &&
               _customerFront(t, grid.radius).any((point) {
@@ -1375,7 +1421,10 @@ void _serveTableFronts(_PublicGrid grid, List<int> walk, Set<int> mandatory) {
   final targets = <int>[];
   for (final table in tables(grid.p).where(
     (t) =>
+        t['kind'] == 'table' &&
         t['capacity'] != 0 &&
+        t['usage'] != 'Places assises' &&
+        furnitureUse(t) != 'Service' &&
         t['unplacedByArrangement'] != true &&
         t['parcoursBlock'] != null,
   )) {
@@ -1590,8 +1639,8 @@ Json _closedRoutes(
   }
 
   final entrance =
-      rows(p, 'items').where((i) => i['kind'] == 'entry').firstOrNull ??
-      rows(p, 'items').firstWhere((i) => i['kind'] == 'exit');
+      physicalPlanItems(p).where((i) => i['kind'] == 'entry').firstOrNull ??
+      physicalPlanItems(p).firstWhere((i) => i['kind'] == 'exit');
   final accessStops = grid.free.where((id) {
     final v = grid.point(id);
     return v.x >= number(entrance['x']) - half &&
@@ -1634,7 +1683,7 @@ Json _closedRoutes(
   final paths = <List<List<double>>>[grid.simplify(rotated)];
   // Additional exits are terminal access links. They must never replace an
   // arc of the exhibitor loop or turn its connected maze into separate islands.
-  for (final access in rows(p, 'items').where(
+  for (final access in physicalPlanItems(p).where(
     (i) =>
         (i['kind'] == 'entry' || i['kind'] == 'exit') &&
         i['id'] != entrance['id'],
@@ -2214,7 +2263,10 @@ Json _routes(_Layout layout) {
         for (final table in tables(p).where(
           (t) =>
               t['parcoursBlock'] != null &&
+              t['kind'] == 'table' &&
               t['capacity'] != 0 &&
+              t['usage'] != 'Places assises' &&
+              furnitureUse(t) != 'Service' &&
               t['unplacedByArrangement'] != true,
         )) {
           for (final point in _customerFront(table, grid.radius)) {
@@ -2257,7 +2309,10 @@ List<_Layout> _complementaryLayouts(_Layout layout) {
       .where(
         (t) =>
             t['unplacedByArrangement'] == true &&
+            t['kind'] == 'table' &&
             t['capacity'] != 0 &&
+            t['usage'] != 'Places assises' &&
+            furnitureUse(t) != 'Service' &&
             t['fixed'] != true,
       )
       .length;
@@ -2327,7 +2382,10 @@ List<_Layout> _perimeterLayouts(
               (t) =>
                   t['unplacedByArrangement'] == true &&
                   t['fixed'] != true &&
+                  t['kind'] == 'table' &&
                   t['capacity'] != 0 &&
+                  t['usage'] != 'Places assises' &&
+                  furnitureUse(t) != 'Service' &&
                   t['shape'] != 'cercle',
             )
             .toList()
@@ -2411,7 +2469,7 @@ List<_Layout> _perimeterLayouts(
           'parcoursBlock': 'perimeter-$edge-${t['id']}',
         });
         q.remove('unplacedByArrangement');
-        final blockedAccess = rows(p, 'items').any(
+        final blockedAccess = physicalPlanItems(p).any(
           (i) =>
               (['entry', 'exit', 'door'].contains(i['kind']) &&
                   overlaps(q, i, eventCirculation(p) / 2)) ||
@@ -2470,7 +2528,7 @@ _Layout? _shiftOpenLayout(_Layout layout, double dx, double dy) {
     for (final b in layout.blocks)
       {...b, 'x': number(b['x']) + dx, 'y': number(b['y']) + dy},
   ];
-  final obstacles = rows(p, 'items')
+  final obstacles = physicalPlanItems(p)
       .where(
         (i) => i['kind'] != 'table' || i['fixed'] == true || i['capacity'] == 0,
       )
@@ -2493,7 +2551,10 @@ List<_Layout> _oppositePerimeterLayouts(_Layout layout) {
         (t) =>
             t['unplacedByArrangement'] == true &&
             t['fixed'] != true &&
+            t['kind'] == 'table' &&
             t['capacity'] != 0 &&
+            t['usage'] != 'Places assises' &&
+            furnitureUse(t) != 'Service' &&
             t['shape'] != 'cercle',
       )
       .toList();
@@ -2539,6 +2600,8 @@ List<_Layout> _oppositePerimeterLayouts(_Layout layout) {
 }
 
 int arrangeParcours(Json p) {
+  final furnitureError = parcoursFurnitureError(p);
+  if (furnitureError != null) throw FormatException(furnitureError);
   if (!parcoursAvailable(p)) {
     throw const FormatException(
       'Parcours réservé aux événements personnalisés, marchés de Noël et brocantes.',
@@ -2649,7 +2712,14 @@ int arrangeParcours(Json p) {
     }
     if (viable.isEmpty) {
       final movableCount = tables(base)
-          .where((t) => t['fixed'] != true && t['capacity'] != 0)
+          .where(
+            (t) =>
+                t['fixed'] != true &&
+                t['kind'] == 'table' &&
+                t['capacity'] != 0 &&
+                t['usage'] != 'Places assises' &&
+                furnitureUse(t) != 'Service',
+          )
           .length;
       final budgets =
           <int>{
@@ -2761,13 +2831,13 @@ int arrangeParcours(Json p) {
       }
     }
   }
-  final geometry = PlanGeometry(p, rows(p, 'items'));
+  final geometry = PlanGeometry(p, physicalPlanItems(p));
   final invalidBlocks = tables(p)
       .where(
         (t) =>
             t['parcoursBlock'] != null &&
             !unplacedTable(p, t) &&
-            !fits(p, t, rows(p, 'items'), geometry: geometry),
+            !fits(p, t, physicalPlanItems(p), geometry: geometry),
       )
       .map((t) => t['parcoursBlock'])
       .toSet();
@@ -2787,7 +2857,12 @@ int arrangeParcours(Json p) {
   final unsupported = tables(p)
       .where(
         (t) =>
-            t['shape'] == 'cercle' && t['fixed'] != true && t['capacity'] != 0,
+            t['shape'] == 'cercle' &&
+            t['fixed'] != true &&
+            t['kind'] == 'table' &&
+            t['capacity'] != 0 &&
+            t['usage'] != 'Places assises' &&
+            furnitureUse(t) != 'Service',
       )
       .length;
   if (unsupported > 0) {

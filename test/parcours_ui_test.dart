@@ -147,7 +147,7 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Disposer tables'));
+        await tester.tap(find.text('Disposer mobilier'));
         await tester.pumpAndSettle();
         expect(
           find.text('Mode de disposition'),
@@ -168,7 +168,7 @@ void main() {
     final before = clone(p);
     await tester.pumpWidget(Tableo(store: MemoryStore([p])));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Disposer tables'));
+    await tester.tap(find.text('Disposer mobilier'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('parcours-gap')), findsNothing);
     expect(
@@ -194,7 +194,7 @@ void main() {
       Tableo(store: MemoryStore([p]), arrangementRunner: immediateArrangement),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Disposer tables'));
+    await tester.tap(find.text('Disposer mobilier'));
     await tester.pumpAndSettle();
     final mode = find.widgetWithText(
       DropdownButtonFormField<String>,
@@ -265,15 +265,21 @@ void main() {
               .writeAsBytesSync(data!.buffer.asUint8List());
         });
       }
-      final toggle = find.text('Afficher le parcours proposé');
-      await tester.ensureVisible(toggle);
+      final display = find.byKey(const ValueKey('plan-tool-display'));
+      await tester.ensureVisible(display);
+      await tester.tap(display);
       await tester.pumpAndSettle();
+      final toggle = find.byWidgetPredicate(
+        (w) => w is CheckedPopupMenuItem<String> && w.value == 'route',
+      );
       await tester.tap(toggle);
       await tester.pumpAndSettle();
       expect(p['showParcours'], false);
       expect(planSvg(p), isNot(contains('<polyline')));
       tables(p).first['joinGap'] = .15;
       expect(parcoursCurrent(p), false);
+      await tester.tap(display);
+      await tester.pumpAndSettle();
       await tester.tap(toggle);
       await tester.pumpAndSettle();
       final painters = tester
@@ -285,7 +291,9 @@ void main() {
       expect(painters.single.stale, true);
       expect(parcoursPaths(p), isEmpty);
       expect(
-        find.text('Dernier tracé en pointillés : plan modifié, à recalculer.'),
+        find.text(
+          'Dernier tracé en pointillés. Vous pouvez recalculer le parcours ou garder le plan actuel.',
+        ),
         findsOneWidget,
       );
     },

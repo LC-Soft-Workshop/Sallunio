@@ -86,7 +86,9 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('plan-tool-labels')));
+      await tester.tap(find.byKey(const ValueKey('plan-tool-display')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Afficher les noms sur le mobilier'));
       await tester.pumpAndSettle();
       Iterable<PlaceLabelsPainter> painters() => tester
           .widgetList<CustomPaint>(find.byType(CustomPaint))
