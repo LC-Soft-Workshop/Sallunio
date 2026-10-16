@@ -1,6 +1,8 @@
 # Tableo
 
-**Tableo 1.2.0** est une application Windows en français pour préparer les événements : plans de salle, mobilier, réservations, attribution des places, accueil et service.
+<img src="assets/branding/tableo-modules.png" alt="Icône officielle de Tableo — Modules" width="96">
+
+**Tableo 1.2.1** est une application Windows en français pour préparer les événements : plans de salle, mobilier, réservations, attribution des places, accueil et service.
 
 L’application fonctionne **localement, sans compte**. Vos événements restent sur votre ordinateur. Android, la sauvegarde en ligne, le travail collaboratif et les rôles sont envisagés pour une future version 2 et ne sont pas inclus dans cette version.
 
@@ -28,6 +30,14 @@ Les événements sont conservés séparément dans **%APPDATA%\Tableo\tableo.sql
 Le numéro de version, en bas à droite, donne accès à la vérification des mises à jour et aux changements publiés. La vérification consulte GitHub et n’envoie aucun événement, nom, plan ou logo. Elle ne télécharge ni n’installe automatiquement de version ; les fonctions locales restent disponibles hors ligne.
 
 Voir [Données et mises à jour](DONNEES-ET-MISES-A-JOUR.md) pour les détails du stockage, de la confidentialité et de la fabrication des livraisons.
+
+## Identité visuelle — version 1.2.1
+
+Le logo officiel « Modules », violet et corail sur fond bleu nuit, remplace l’icône Flutter dans l’application Windows. Il est commun aux distributions GitHub et Microsoft Store. Les fonctions et le format des événements restent ceux de la version 1.2.0.
+
+La même version 1.2.1 a été envoyée au Microsoft Store ; sa disponibilité dépend de la certification et de la publication Microsoft. [Fiche Microsoft Store](https://apps.microsoft.com/detail/9PNHKMRHHJML).
+
+Les sources et règles de conservation du logo sont dans [l’identité officielle](assets/branding/IDENTITE.md).
 
 ## Principales fonctions
 

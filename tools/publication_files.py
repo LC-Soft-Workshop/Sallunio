@@ -11,7 +11,11 @@ EXACT = {
     'windows/CMakeLists.txt', 'windows/flutter/CMakeLists.txt',
     'windows/runner/resources/app_icon.ico',
     'tools/publication_files.py', 'tools/package_release.py',
-    'tools/test_publication.py', 'tools/release_notes.py', '.github/workflows/release.yml',
+    'tools/test_publication.py', 'tools/release_notes.py',
+    'tools/package_store.py', 'tools/test_store_package.py', '.github/workflows/release.yml',
+    'tools/generate_app_icons.py', 'assets/branding/tableo-modules.svg',
+    'assets/branding/tableo-modules.png', 'assets/branding/IDENTITE.md',
+    'assets/branding/identite-reference.sha256.json',
     '.githooks/pre-commit', '.githooks/pre-push',
 }
 

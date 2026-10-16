@@ -3,6 +3,13 @@
 Historique en français, établi à partir des validations conservées du projet.
 Les anciennes versions ne constituent pas des livraisons GitHub rétroactives.
 
+## 1.2.1
+
+- Identité officielle « Modules » : trois blocs violet/corail sur fond bleu nuit, commune à l’exécutable Windows et au paquet Microsoft Store. Remplacement du logo Flutter par défaut, avec sept tailles d’icône Windows.
+- Ajout des sources du logo et de ses règles de conservation pour garantir une identité identique sur les différents supports.
+- Préparation Microsoft Store : génération d’un paquet MSIX x64 avec identité officielle, contrôle fermé des fichiers, logos séparés et validation par le SDK Windows. Aucun certificat de test installé et aucune donnée utilisateur incluse.
+- Fonctions et format des événements inchangés par rapport à 1.2.0. La distribution GitHub est publiée en 1.2.1 ; la mise à jour Store suit le circuit de certification Microsoft.
+
 ## 1.2.0
 
 Évolutions depuis **1.1.1**. Version Windows locale, sans compte ni envoi des événements sur Internet.
