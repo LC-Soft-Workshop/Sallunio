@@ -3703,7 +3703,7 @@ void validateProject(Json p) {
       p['id'] is! String ||
       p['name'] is! String ||
       p['room'] is! Map) {
-    throw const FormatException('Projet Tableo version 1 attendu');
+    throw const FormatException('Projet Sallunio/Tableo version 1 attendu');
   }
   if (number(p['room']['width']) <= 0 ||
       number(p['room']['height']) <= 0 ||

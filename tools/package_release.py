@@ -9,10 +9,10 @@ import argparse
 import struct
 
 RUNTIME_FILES = {
-    'tableo.exe', 'flutter_windows.dll', 'sqlite3.dll', 'data/app.so', 'data/icudtl.dat',
+    'sallunio.exe', 'flutter_windows.dll', 'sqlite3.dll', 'data/app.so', 'data/icudtl.dat',
     *('data/flutter_assets/' + name for name in (
         'AssetManifest.bin', 'FontManifest.json', 'NativeAssetsManifest.json',
-        'NOTICES.Z', 'fonts/MaterialIcons-Regular.otf',
+        'NOTICES.Z', 'fonts/MaterialIcons-Regular.otf', 'assets/branding/sallunio.png',
         'packages/cupertino_icons/assets/CupertinoIcons.ttf',
         'shaders/ink_sparkle.frag', 'shaders/stretch_effect.frag')),
 }
@@ -66,6 +66,10 @@ def audit_material_icons(source):
     except (StopIteration, struct.error, IndexError) as error:
         raise ValueError('Police d’icônes invalide.') from error
 
+PUBLIC_FILES = ['README.md', 'CHANGELOG.md', 'DONNEES-ET-MISES-A-JOUR.md',
+                'MIGRATION-SALLUNIO.md', 'assets/branding/sallunio.png',
+                'assets/branding/IDENTITE.md', 'examples/modele-reservations.csv']
+
 def package(root, local=False):
     version = re.search(r'^version:\s*([\d.]+)', (root / 'pubspec.yaml').read_text(), re.M)[1]
     assert f"const appVersion = '{version}';" in (root / 'lib/app_version.dart').read_text()
@@ -73,23 +77,26 @@ def package(root, local=False):
     files = audit_runtime(source)
     if (root / 'lib/main.dart').exists():
         audit_material_icons(source)
-    target = root / 'dist' / ('Tableo-test' if local else f'Tableo-{version}')
-    archive = root / 'dist' / f'Tableo-Windows-{version}.zip'
-    public_files = ['README.md', 'CHANGELOG.md', 'DONNEES-ET-MISES-A-JOUR.md', 'examples/modele-reservations.csv']
+    target = root / 'dist' / ('Tableo-test' if local else f'Sallunio-{version}')
+    archive = root / 'dist' / f'Sallunio-Windows-{version}.zip'
+    public_files = PUBLIC_FILES
     expected = files | set(public_files)
     if local:
         if target.resolve().parent != (root/'dist').resolve() or target.is_symlink():
             raise ValueError('Dossier de test incorrect.')
         if target.exists():
             found = {p.relative_to(target).as_posix() for p in target.rglob('*') if p.is_file()}
-            if found - expected - {'LOCAL-TEST.txt'} or any(p.is_symlink() for p in target.rglob('*')):
+            if found - expected - {'LOCAL-TEST.txt', 'tableo.exe'} or any(p.is_symlink() for p in target.rglob('*')):
                 raise ValueError('Dossier de test contenant des fichiers inconnus : remplacement refusé.')
         target.mkdir(parents=True, exist_ok=True)
         for name in sorted(expected):
             dest=target/name
             dest.parent.mkdir(parents=True,exist_ok=True)
             shutil.copy2(source/name if name in files else root/name,dest)
-        (target/'LOCAL-TEST.txt').write_text(f'Test local de Tableo {version}. Non publié. Les prochains essais remplacent uniquement les fichiers de ce dossier.\n',encoding='utf-8')
+        (target/'LOCAL-TEST.txt').write_text(f'Test local de Sallunio {version}. Non publié. Les prochains essais remplacent uniquement les fichiers de ce dossier.\n',encoding='utf-8')
+        legacy_executable = target/'tableo.exe'
+        if legacy_executable.is_file():
+            legacy_executable.unlink()  # Controlled old runtime, after successful replacement.
         print(target)
         return
     if target.exists() or archive.exists():

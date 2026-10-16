@@ -1,28 +1,28 @@
-# Tableo
+# Sallunio
 
-<img src="assets/branding/tableo-modules.png" alt="Icône officielle de Tableo — Modules" width="96">
+<img src="assets/branding/sallunio.png" alt="Icône officielle de Sallunio" width="96">
 
-**Tableo 1.2.1** est une application Windows en français pour préparer les événements : plans de salle, mobilier, réservations, attribution des places, accueil et service.
+**Sallunio 1.2.2 (anciennement Tableo)** est une application Windows en français pour préparer les événements : plans de salle, mobilier, réservations, attribution des places, accueil et service.
 
 L’application fonctionne **localement, sans compte**. Vos événements restent sur votre ordinateur. Android, la sauvegarde en ligne, le travail collaboratif et les rôles sont envisagés pour une future version 2 et ne sont pas inclus dans cette version.
 
 ## Télécharger la dernière version
 
-**[Télécharger Tableo pour Windows — ZIP](https://github.com/freakbn777/Tableo/releases/latest/download/Tableo-Windows.zip)**
+**[Télécharger Sallunio pour Windows — ZIP](https://github.com/LC-Soft-Workshop/Sallunio/releases/latest/download/Sallunio-Windows.zip)**
 
 Ce lien permanent télécharge la dernière version publiée. Le paquet est destiné à Windows 64 bits.
 
-- [Nouveautés de la dernière version](https://github.com/freakbn777/Tableo/releases/latest)
-- [Guide utilisateur en français — Wiki](https://github.com/freakbn777/Tableo/wiki)
+- [Nouveautés de la dernière version](https://github.com/LC-Soft-Workshop/Sallunio/releases/latest)
+- [Guide utilisateur en français — Wiki](https://github.com/LC-Soft-Workshop/Sallunio/wiki)
 - [Historique complet en français](CHANGELOG.md)
-- [Signaler un problème ou proposer une amélioration](https://github.com/freakbn777/Tableo/issues)
+- [Signaler un problème ou proposer une amélioration](https://github.com/LC-Soft-Workshop/Sallunio/issues)
 
 Les retours des organisateurs sont les bienvenus : ce qui fonctionne bien, ce qui manque et ce qui gagnerait à être simplifié. Ne joignez pas de réservations réelles ou de données personnelles dans un signalement public ; un exemple fictif suffit généralement à reproduire un problème.
 
 ## Installer et mettre à jour
 
 1. Télécharger le ZIP et le décompresser dans un dossier dédié.
-2. Lancer **tableo.exe**, en conservant tous les fichiers du paquet ensemble.
+2. Lancer **sallunio.exe** (les archives historiques utilisent **tableo.exe**), en conservant tous les fichiers du paquet ensemble.
 3. Pour une mise à jour, fermer l’ancienne application, décompresser la nouvelle version dans un autre dossier, puis lancer son exécutable.
 
 Les événements sont conservés séparément dans **%APPDATA%\Tableo\tableo.sqlite**. Le ZIP ne contient aucune base personnelle et une mise à jour n’écrase pas cette base. Avant une mise à jour importante, **Fichiers → Exporter projet** permet de garder une copie indépendante des événements choisis.
@@ -31,13 +31,13 @@ Le numéro de version, en bas à droite, donne accès à la vérification des mi
 
 Voir [Données et mises à jour](DONNEES-ET-MISES-A-JOUR.md) pour les détails du stockage, de la confidentialité et de la fabrication des livraisons.
 
-## Identité visuelle — version 1.2.1
+## Tableo devient Sallunio — version 1.2.2
 
-Le logo officiel « Modules », violet et corail sur fond bleu nuit, remplace l’icône Flutter dans l’application Windows. Il est commun aux distributions GitHub et Microsoft Store. Les fonctions et le format des événements restent ceux de la version 1.2.0.
+Sallunio est le nouveau nom de Tableo. L’image officielle fournie par l’éditeur remplace le logo Modules. Le nom d’éditeur est **LC Software Workshop**, également enregistré sur le compte Microsoft Store.
 
-La même version 1.2.1 a été envoyée au Microsoft Store ; sa disponibilité dépend de la certification et de la publication Microsoft. [Fiche Microsoft Store](https://apps.microsoft.com/detail/9PNHKMRHHJML).
+La version **1.2.2** adopte le nom Sallunio et son icône officielle. Les fichiers GitHub portent le nom `Sallunio-Windows-1.2.2.zip`. Les liens de téléchargement historiques Tableo restent pris en charge. La mise à jour Microsoft Store suit la certification Microsoft ; consulter la fiche pour sa disponibilité effective.
 
-Les sources et règles de conservation du logo sont dans [l’identité officielle](assets/branding/IDENTITE.md).
+Les bases `%APPDATA%\Tableo\tableo.sqlite`, les projets et sauvegardes Tableo restent compatibles. Ne pas déplacer ni renommer manuellement ces fichiers. Voir [la procédure de migration, de publication et de retour arrière](MIGRATION-SALLUNIO.md).
 
 ## Principales fonctions
 
@@ -173,13 +173,13 @@ flutter pub get
 flutter analyze
 flutter test
 python tools/test_publication.py
-flutter build windows --release --no-tree-shake-icons --dart-define=TABLEO_GITHUB_REPOSITORY=freakbn777/Tableo
+flutter build windows --release --no-tree-shake-icons --dart-define=TABLEO_GITHUB_REPOSITORY=LC-Soft-Workshop/Sallunio
 python tools/package_release.py
 ```
 
 La liste des fichiers autorisés se consulte avec **python tools/publication_files.py**. Les bases, sauvegardes, PDF, dossiers de travail et livraisons locales sont exclus du dépôt. Le paquet Windows est fabriqué à partir d’une liste fermée et accompagné d’une empreinte SHA-256.
 
-GitHub vérifie le code et compile Windows. Un tag **vX.Y.Z** correspondant au numéro du logiciel publie une livraison avec les notes extraites du changelog français et un ZIP au nom permanent **Tableo-Windows.zip**.
+GitHub vérifie le code et compile Windows. Un tag **vX.Y.Z** correspondant au numéro du logiciel publie une livraison avec les notes extraites du changelog français et un ZIP au nom permanent **Sallunio-Windows.zip**.
 
 Les essais locaux utilisent **python tools/package_release.py --local**, qui actualise uniquement **dist/Tableo-test**. Leur numéro reste celui de la dernière publication jusqu’à une publication suivante autorisée ; aucune suite de versions locales intermédiaires n’est créée.
 
@@ -189,7 +189,7 @@ La version 2 pourrait proposer Android avec un périmètre adapté aux petits é
 
 ## Sièges, stands et outils de la version 1.2.0
 
-La version 1.2.0 étend la gestion aux stands, sièges autonomes et plans annotés. Le [changelog](CHANGELOG.md#120) détaille les nouveautés depuis 1.1.1.
+La version historique Tableo 1.2.0 étend la gestion aux stands, sièges autonomes et plans annotés. Le [changelog](CHANGELOG.md#120) détaille les nouveautés depuis 1.1.1.
 
 - Dans **Événements → Propriétés → Attribution**, choisir places assises ou exposants/stands, l’unité des stands (tables ou mètres) et le placement libre ou attribué. Ces réglages définissent les nouveaux éléments ; les événements peuvent conserver un mélange d’usages.
 - Dans **Mobilier**, ajouter des tables, des chaises, des chaises enfant, des bancs ou des emplacements PMR sans chaise. La capacité des bancs suit la largeur par personne de **Confort**. Sur le plan, **Modifier** permet de régler l’usage d’une pièce ; avec plusieurs pièces sélectionnées, l’outil de modification propose un changement d’usage collectif.

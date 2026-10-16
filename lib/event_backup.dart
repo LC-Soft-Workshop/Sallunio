@@ -11,7 +11,7 @@ Json eventBackup(List<Json> events) => {
 List<Json> readEventBackup(String text) {
   final decoded = jsonDecode(text);
   if (decoded is! Map<String, dynamic>) {
-    throw const FormatException('Fichier Tableo invalide.');
+    throw const FormatException('Fichier Sallunio invalide.');
   }
   final List<dynamic> source;
   if (decoded['format'] == 'tableo-backup') {

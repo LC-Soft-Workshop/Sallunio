@@ -4,7 +4,7 @@ import 'dart:io';
 
 const githubRepository = String.fromEnvironment(
   'TABLEO_GITHUB_REPOSITORY',
-  defaultValue: 'freakbn777/Tableo',
+  defaultValue: 'LC-Soft-Workshop/Sallunio',
 );
 
 class UpdateInfo {
@@ -75,7 +75,7 @@ class GithubUpdateService implements UpdateService {
           .timeout(const Duration(seconds: 8));
       request.headers.set(
         HttpHeaders.userAgentHeader,
-        'Tableo/$installedVersion',
+        'Sallunio/$installedVersion',
       );
       request.headers.set(
         HttpHeaders.acceptHeader,

@@ -44,7 +44,7 @@ void main() {
       expect(find.text('Aucun événement'), findsOneWidget);
       await tester.tap(find.text('Mise à jour 1.0.32'));
       await tester.pumpAndSettle();
-      expect(find.text('Tableo 1.0.32 est disponible'), findsOneWidget);
+      expect(find.text('Sallunio 1.0.32 est disponible'), findsOneWidget);
       await tester.tap(find.text('Voir les changements'));
       await tester.pumpAndSettle();
       expect(links.opened.single.path, '/example/tableo/releases/tag/v1.0.32');

@@ -1,22 +1,8 @@
-# Identité officielle de Tableo
+# Identité officielle de Sallunio
 
-Le logo « Modules », choisi parmi les propositions sous le numéro 4 et validé le 16 octobre 2026, est l’identité officielle de Tableo.
+Nom public : Sallunio. Éditeur souhaité : LC Software Workshop.
+Le fichier `sallunio.png` est la référence fournie par l’éditeur le 16 octobre 2026. Il remplace explicitement l’ancienne identité Modules de Tableo. Conserver sa composition, sa typographie, ses couleurs et sa transparence. Aucune génération IA ni redessin n’est autorisé. Seuls les redimensionnements et conversions techniques sont permis.
 
-## Références approuvées
+Les fichiers tableo-modules.* sont conservés comme archives de l’identité historique, pas comme logo actuel. Les empreintes du logo actuel et de son ICO sont dans identite-reference.sha256.json.
 
-- Source vectorielle : `tableo-modules.svg`.
-- Image de référence : `tableo-modules.png`.
-- Icône Windows : `../../windows/runner/resources/app_icon.ico`.
-- Générateur technique : `../../tools/generate_app_icons.py`.
-
-Trois blocs évoquent du mobilier assemblé en T sur un fond carré arrondi bleu nuit. Couleurs : fond `#20283E`, violet `#5856D6`, corail `#FF8A65`.
-
-## Conservation
-
-Réutiliser ces fichiers sur tous les canaux : application, Microsoft Store, GitHub et communication. Ne pas modifier les formes, proportions, disposition, couleurs ou arrondis. Ne pas créer de nouvelle variante artistique ni revenir au logo Flutter.
-
-Les changements de dimensions et de format nécessaires aux plateformes sont permis en préservant le dessin et ses proportions. La version en cours de certification dans le paquet Store 1.2.1 constitue la référence livrée.
-
-Une évolution lors d’une éventuelle version majeure 2 ou 3 reste une possibilité à discuter, pas une autorisation automatique. Toute refonte nécessite l’accord explicite de l’éditeur.
-
-Les empreintes des fichiers approuvés sont conservées dans `identite-reference.sha256.json` pour vérifier qu’ils restent identiques.
+Le nom éditeur Windows peut être LC Software Workshop. Le nom public du compte Store, son Publisher technique et le certificat sont des informations distinctes ; ne pas les changer sans validation Microsoft et accord de l’éditeur.

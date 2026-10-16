@@ -7,14 +7,14 @@ Le stockage refuse de retomber dans le dossier du logiciel si le dossier personn
 Windows ne peut pas être trouvé. Le nettoyage des livraisons ne touche pas ce dossier.
 
 Pour mettre à jour, décompresser la nouvelle livraison dans son propre dossier
-`Tableo-numéro-de-version`, fermer l'ancienne application et lancer la nouvelle.
+`Sallunio-numéro-de-version`, fermer l'ancienne application et lancer la nouvelle.
 Ne jamais décompresser un logiciel dans le dossier des données personnelles.
 La vérification de version ne télécharge ni n'installe automatiquement de logiciel.
 
 La seule requête de vérification consulte la dernière version publique de GitHub.
 Elle transmet le numéro de version du logiciel dans son en-tête ; aucun événement,
 nom, réservation, plan ou logo ne lui est fourni. GitHub reçoit les informations
-habituelles d'une connexion Internet, dont l'adresse IP. Sans connexion, Tableo
+habituelles d'une connexion Internet, dont l'adresse IP. Sans connexion, Sallunio
 reste utilisable. Le menu du numéro de version permet une vérification manuelle
 et l'ouverture de l'historique français.
 

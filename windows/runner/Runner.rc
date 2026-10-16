@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "tableo" "\0"
+            VALUE "CompanyName", "LC Software Workshop" "\0"
+            VALUE "FileDescription", "Sallunio" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "tableo" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "tableo.exe" "\0"
-            VALUE "ProductName", "tableo" "\0"
+            VALUE "InternalName", "sallunio" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 LC Software Workshop. All rights reserved." "\0"
+            VALUE "OriginalFilename", "sallunio.exe" "\0"
+            VALUE "ProductName", "Sallunio" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

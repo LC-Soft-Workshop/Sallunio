@@ -40,7 +40,7 @@ def manifest(identity, version):
         'Version': version + '.0', 'ProcessorArchitecture': 'x64'})
     properties = ET.SubElement(root, f('Properties'))
     for key, value in {
-        'DisplayName': identity.get('displayName', 'Tableo'),
+        'DisplayName': identity.get('displayName', 'Sallunio'),
         'PublisherDisplayName': identity['publisherDisplayName'],
         'Logo': 'Assets/StoreLogo.png',
         'Description': 'Plans de salle, mobilier et réservations',
@@ -58,9 +58,9 @@ def manifest(identity, version):
         'Publisher': 'CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US'})
     applications = ET.SubElement(root, f('Applications'))
     app = ET.SubElement(applications, f('Application'), {
-        'Id': 'Tableo', 'Executable': 'tableo.exe', 'EntryPoint': 'Windows.FullTrustApplication'})
+        'Id': 'Tableo', 'Executable': 'sallunio.exe', 'EntryPoint': 'Windows.FullTrustApplication'})
     ET.SubElement(app, '{' + UAP + '}VisualElements', {
-        'DisplayName': identity.get('displayName', 'Tableo'),
+        'DisplayName': identity.get('displayName', 'Sallunio'),
         'Description': 'Plans de salle, mobilier et réservations',
         'BackgroundColor': 'transparent',
         'Square150x150Logo': 'Assets/Square150x150Logo.png',
@@ -86,7 +86,7 @@ def package(root, identity_file, assets, sdk=None):
                           key=lambda p: tuple(map(int, p.name.split('.'))))
         if not versions: raise FileNotFoundError('SDK Windows / makeappx introuvable.')
         executable = versions[-1]/'x64/makeappx.exe'
-    output = root/'output/store'/f'Tableo-{version}-x64.msix'
+    output = root/'output/store'/f'Sallunio-{version}-x64.msix'
     if output.exists(): raise FileExistsError('Paquet existant conservé : choisir un autre dossier de travail.')
     output.parent.mkdir(parents=True, exist_ok=True)
     (root/'tmp').mkdir(exist_ok=True)

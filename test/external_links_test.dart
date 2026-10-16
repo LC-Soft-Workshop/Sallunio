@@ -9,7 +9,7 @@ import 'update_ui_test.dart' show FakeLinks;
 void main() {
   test('Official comfort link and GitHub are permitted; other destinations are refused', () {
     for (final link in [
-      'https://github.com/freakbn777/Tableo',
+      'https://github.com/LC-Soft-Workshop/Sallunio',
       'https://www.legifrance.gouv.fr/loda/article_lc/LEGIARTI000034485952',
     ]) {
       expect(() => validateExternalLink(Uri.parse(link)), returnsNormally);

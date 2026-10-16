@@ -9,7 +9,7 @@ import 'domain.dart';
 import 'plan_export.dart';
 
 String newPdfPath(String directory) =>
-    '$directory${Platform.pathSeparator}plan-tableo-${DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-')}-${uid().split('-').last}.pdf';
+    '$directory${Platform.pathSeparator}plan-sallunio-${DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-')}-${uid().split('-').last}.pdf';
 
 Future<void> exportPdf(
   Json source,
@@ -77,7 +77,7 @@ Future<void> exportPdf(
   }
   final doc = pw.Document(
     title: p['name'],
-    subject: 'Export Tableo $reference',
+    subject: 'Export Sallunio $reference',
   );
   final fontFile = File(
     '${Platform.environment['WINDIR'] ?? 'C:/Windows'}/Fonts/arial.ttf',

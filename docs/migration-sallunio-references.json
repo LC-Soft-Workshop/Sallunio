@@ -1,0 +1,2252 @@
+{
+  ".github/workflows/release.yml": [
+    {
+      "line": 28,
+      "text": "        run: flutter build windows --release --no-tree-shake-icons --dart-define=TABLEO_GITHUB_REPOSITORY=${{ github.repository }}"
+    },
+    {
+      "line": 39,
+      "text": "          Copy-Item \"dist/Tableo-Windows-$version.zip\" 'dist/Tableo-Windows.zip'"
+    },
+    {
+      "line": 40,
+      "text": "          $checksum = (Get-FileHash 'dist/Tableo-Windows.zip' -Algorithm SHA256).Hash.ToLower()"
+    },
+    {
+      "line": 41,
+      "text": "          \"$checksum  Tableo-Windows.zip\" | Set-Content 'dist/Tableo-Windows.zip.sha256' -Encoding ascii"
+    },
+    {
+      "line": 42,
+      "text": "          gh release create \"${{ github.ref_name }}\" \"dist/Tableo-Windows-$version.zip\" \"dist/Tableo-Windows-$version.zip.sha256\" 'dist/Tableo-Windows.zip' 'dist/Tableo-Windows.zip.sha256' --title \"Tableo $version\" --notes-file release-notes.md"
+    }
+  ],
+  ".gitignore": [
+    {
+      "line": 15,
+      "text": "*.tableo.json"
+    }
+  ],
+  "CHANGELOG.md": [
+    {
+      "line": 1,
+      "text": "# Historique de Tableo"
+    },
+    {
+      "line": 115,
+      "text": "- Les mises à jour conservent la base personnelle séparée des exécutables. Les essais locaux continuent d’utiliser un seul dossier Tableo-test, sans créer de numéros de version supplémentaires."
+    },
+    {
+      "line": 203,
+      "text": "- Première livraison Windows publiée sur GitHub, avec le dépôt de mises à jour configuré sur `freakbn777/Tableo`."
+    }
+  ],
+  "DONNEES-ET-MISES-A-JOUR.md": [
+    {
+      "line": 4,
+      "text": "`%APPDATA%\\Tableo\\tableo.sqlite`, séparément du dossier du logiciel. Une nouvelle"
+    },
+    {
+      "line": 10,
+      "text": "`Tableo-numéro-de-version`, fermer l'ancienne application et lancer la nouvelle."
+    },
+    {
+      "line": 17,
+      "text": "habituelles d'une connexion Internet, dont l'adresse IP. Sans connexion, Tableo"
+    }
+  ],
+  "README.md": [
+    {
+      "line": 1,
+      "text": "# Tableo"
+    },
+    {
+      "line": 3,
+      "text": "<img src=\"assets/branding/tableo-modules.png\" alt=\"Icône officielle de Tableo — Modules\" width=\"96\">"
+    },
+    {
+      "line": 5,
+      "text": "**Tableo 1.2.1** est une application Windows en français pour préparer les événements : plans de salle, mobilier, réservations, attribution des places, accueil et service."
+    },
+    {
+      "line": 11,
+      "text": "**[Télécharger Tableo pour Windows — ZIP](https://github.com/freakbn777/Tableo/releases/latest/download/Tableo-Windows.zip)**"
+    },
+    {
+      "line": 15,
+      "text": "- [Nouveautés de la dernière version](https://github.com/freakbn777/Tableo/releases/latest)"
+    },
+    {
+      "line": 16,
+      "text": "- [Guide utilisateur en français — Wiki](https://github.com/freakbn777/Tableo/wiki)"
+    },
+    {
+      "line": 18,
+      "text": "- [Signaler un problème ou proposer une amélioration](https://github.com/freakbn777/Tableo/issues)"
+    },
+    {
+      "line": 25,
+      "text": "2. Lancer **tableo.exe**, en conservant tous les fichiers du paquet ensemble."
+    },
+    {
+      "line": 28,
+      "text": "Les événements sont conservés séparément dans **%APPDATA%\\Tableo\\tableo.sqlite**. Le ZIP ne contient aucune base personnelle et une mise à jour n’écrase pas cette base. Avant une mise à jour importante, **Fichiers → Exporter projet** permet de garder une copie indépendante des événements choisis."
+    },
+    {
+      "line": 176,
+      "text": "flutter build windows --release --no-tree-shake-icons --dart-define=TABLEO_GITHUB_REPOSITORY=freakbn777/Tableo"
+    },
+    {
+      "line": 182,
+      "text": "GitHub vérifie le code et compile Windows. Un tag **vX.Y.Z** correspondant au numéro du logiciel publie une livraison avec les notes extraites du changelog français et un ZIP au nom permanent **Tableo-Windows.zip**."
+    },
+    {
+      "line": 184,
+      "text": "Les essais locaux utilisent **python tools/package_release.py --local**, qui actualise uniquement **dist/Tableo-test**. Leur numéro reste celui de la dernière publication jusqu’à une publication suivante autorisée ; aucune suite de versions locales intermédiaires n’est créée."
+    }
+  ],
+  "assets/branding/IDENTITE.md": [
+    {
+      "line": 1,
+      "text": "# Identité officielle de Tableo"
+    },
+    {
+      "line": 3,
+      "text": "Le logo « Modules », choisi parmi les propositions sous le numéro 4 et validé le 16 octobre 2026, est l’identité officielle de Tableo."
+    },
+    {
+      "line": 7,
+      "text": "- Source vectorielle : `tableo-modules.svg`."
+    },
+    {
+      "line": 8,
+      "text": "- Image de référence : `tableo-modules.png`."
+    }
+  ],
+  "assets/branding/identite-reference.sha256.json": [
+    {
+      "line": 2,
+      "text": "  \"assets/branding/tableo-modules.svg\": \"898f6412612a2223ad5c3f8e62a9c050fe5c47fcdbba70dcb3ef68dc0a5b62be\","
+    },
+    {
+      "line": 3,
+      "text": "  \"assets/branding/tableo-modules.png\": \"aab46d6435e5be6127651a1b4f8f844beaaf83128f3e06a655abdb5b175e36e6\","
+    }
+  ],
+  "lib/domain.dart": [
+    {
+      "line": 1367,
+      "text": "bool tableOutsideRoom(Json p, Json table) {"
+    },
+    {
+      "line": 1963,
+      "text": "      'capacity': tableOutsideRoom(p, t)"
+    },
+    {
+      "line": 3706,
+      "text": "    throw const FormatException('Projet Tableo version 1 attendu');"
+    }
+  ],
+  "lib/event_backup.dart": [
+    {
+      "line": 6,
+      "text": "  'format': 'tableo-backup',"
+    },
+    {
+      "line": 14,
+      "text": "    throw const FormatException('Fichier Tableo invalide.');"
+    },
+    {
+      "line": 17,
+      "text": "  if (decoded['format'] == 'tableo-backup') {"
+    }
+  ],
+  "lib/exports.dart": [
+    {
+      "line": 12,
+      "text": "    '$directory${Platform.pathSeparator}plan-tableo-${DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-')}-${uid().split('-').last}.pdf';"
+    },
+    {
+      "line": 80,
+      "text": "    subject: 'Export Tableo $reference',"
+    }
+  ],
+  "lib/file_dialogs.dart": [
+    {
+      "line": 25,
+      "text": "        extension == 'tableo.json' && path.toLowerCase().endsWith('.json')"
+    },
+    {
+      "line": 115,
+      "text": "      '${request.description}\\u0000${request.extension == 'image' ? '*.png;*.jpg;*.jpeg' : '*.${request.extension == 'tableo.json' ? 'json' : request.extension}'}\\u0000Tous les fichiers\\u0000*.*\\u0000\\u0000'"
+    },
+    {
+      "line": 122,
+      "text": "              : request.extension == 'tableo.json'"
+    }
+  ],
+  "lib/github_updates.dart": [
+    {
+      "line": 6,
+      "text": "  'TABLEO_GITHUB_REPOSITORY',"
+    },
+    {
+      "line": 7,
+      "text": "  defaultValue: 'freakbn777/Tableo',"
+    },
+    {
+      "line": 78,
+      "text": "        'Tableo/$installedVersion',"
+    }
+  ],
+  "lib/main.dart": [
+    {
+      "line": 300,
+      "text": "      Tableo("
+    },
+    {
+      "line": 323,
+      "text": "class Tableo extends StatefulWidget {"
+    },
+    {
+      "line": 329,
+      "text": "  const Tableo({"
+    },
+    {
+      "line": 338,
+      "text": "  State<Tableo> createState() => _TableoState();"
+    },
+    {
+      "line": 341,
+      "text": "class _TableoState extends State<Tableo> {"
+    },
+    {
+      "line": 391,
+      "text": "    title: 'Tableo',"
+    },
+    {
+      "line": 815,
+      "text": "      title: Text('Tableo ${update.version} est disponible'),"
+    },
+    {
+      "line": 2180,
+      "text": "                !tableOutsideRoom(p!, t),"
+    },
+    {
+      "line": 3313,
+      "text": "        '${widget.store.directory}${Platform.pathSeparator}tableo-${section.toLowerCase().replaceAll(' ', '-')}.csv';"
+    },
+    {
+      "line": 4128,
+      "text": "        : '${widget.store.directory}${Platform.pathSeparator}projet-tableo.tableo.json';"
+    },
+    {
+      "line": 4136,
+      "text": "        extension: isPdf ? 'pdf' : 'tableo.json',"
+    },
+    {
+      "line": 4137,
+      "text": "        description: isPdf ? 'PDF (*.pdf)' : 'Projet Tableo (*.json)',"
+    },
+    {
+      "line": 4920,
+      "text": "          appBar: AppBar(title: const Text('Tableo'), actions: [themeButton()]),"
+    },
+    {
+      "line": 4950,
+      "text": "        appBar: AppBar(title: const Text('Tableo'), actions: [themeButton()]),"
+    },
+    {
+      "line": 4964,
+      "text": "            const Text('Tableo'),"
+    },
+    {
+      "line": 5979,
+      "text": "        .where((t) => t['fixed'] != true && tableOutsideRoom(p!, t))"
+    }
+  ],
+  "lib/mixed_furniture.dart": [
+    {
+      "line": 277,
+      "text": "          tableOutsideRoom(p, t) ||"
+    },
+    {
+      "line": 396,
+      "text": "              !tableOutsideRoom(p, t) &&"
+    },
+    {
+      "line": 800,
+      "text": "            !tableOutsideRoom(p, t) &&"
+    }
+  ],
+  "lib/mixed_furniture_ui.dart": [
+    {
+      "line": 51,
+      "text": "              !tableOutsideRoom(draft, t),"
+    }
+  ],
+  "lib/storage.dart": [
+    {
+      "line": 25,
+      "text": "  return '$root${Platform.pathSeparator}Tableo';"
+    },
+    {
+      "line": 40,
+      "text": "      '$directory${Platform.pathSeparator}tableo.sqlite',"
+    }
+  ],
+  "pubspec.yaml": [
+    {
+      "line": 1,
+      "text": "name: tableo"
+    },
+    {
+      "line": 2,
+      "text": "description: \"Tableo : préparation locale de plans de salle et réservations.\""
+    }
+  ],
+  "test/access_audience_test.dart": [
+    {
+      "line": 4,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/event_backup.dart';"
+    }
+  ],
+  "test/activity_test.dart": [
+    {
+      "line": 3,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 4,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 37,
+      "text": "    await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/annotation_shapes_test.dart": [
+    {
+      "line": 6,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 8,
+      "text": "import 'package:tableo/exports.dart';"
+    },
+    {
+      "line": 9,
+      "text": "import 'package:tableo/event_backup.dart';"
+    },
+    {
+      "line": 10,
+      "text": "import 'package:tableo/parcours.dart';"
+    },
+    {
+      "line": 11,
+      "text": "import 'package:tableo/plan_export.dart';"
+    },
+    {
+      "line": 126,
+      "text": "    await t.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/arrange_sectors_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    }
+  ],
+  "test/arrangement_busy_test.dart": [
+    {
+      "line": 6,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 22,
+      "text": "          Tableo("
+    }
+  ],
+  "test/arrangement_start_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    }
+  ],
+  "test/attributions_test.dart": [
+    {
+      "line": 10,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 11,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 12,
+      "text": "import 'package:tableo/storage.dart';"
+    },
+    {
+      "line": 87,
+      "text": "          child: Tableo(store: store),"
+    },
+    {
+      "line": 124,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 135,
+      "text": "    await tester.pumpWidget(Tableo(store: SnapshotStore()));"
+    },
+    {
+      "line": 150,
+      "text": "      final dir = await Directory.systemTemp.createTemp('tableo-attributions-');"
+    }
+  ],
+  "test/backup_merge_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 3,
+      "text": "import 'package:tableo/backup_merge.dart';"
+    }
+  ],
+  "test/backup_merge_ui_test.dart": [
+    {
+      "line": 6,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/event_backup.dart';"
+    },
+    {
+      "line": 8,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 18,
+      "text": "  final file = File('tmp/merge-${uid()}.tableo.json').absolute;"
+    },
+    {
+      "line": 27,
+      "text": "  await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/card_branding_test.dart": [
+    {
+      "line": 6,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/exports.dart';"
+    },
+    {
+      "line": 8,
+      "text": "import 'package:tableo/file_dialogs.dart';"
+    },
+    {
+      "line": 9,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 50,
+      "text": "      await tester.pumpWidget(Tableo(store: store, fileDialogs: LogoDialog()));"
+    }
+  ],
+  "test/chair_labels_test.dart": [
+    {
+      "line": 5,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 6,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 87,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/child_chair_test.dart": [
+    {
+      "line": 4,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/event_backup.dart';"
+    },
+    {
+      "line": 6,
+      "text": "import 'package:tableo/plan_tools.dart';"
+    }
+  ],
+  "test/clear_room_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 3,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 48,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 128,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/closed_comfort_regression_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 3,
+      "text": "import 'package:tableo/parcours.dart';"
+    }
+  ],
+  "test/closed_mixed_usage_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    }
+  ],
+  "test/closed_seated_zones_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 3,
+      "text": "import 'package:tableo/parcours.dart';"
+    }
+  ],
+  "test/comfort_information_test.dart": [
+    {
+      "line": 3,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 4,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 81,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/csv_delta_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 3,
+      "text": "import 'package:tableo/csv_delta.dart';"
+    }
+  ],
+  "test/csv_empty_ui_test.dart": [
+    {
+      "line": 5,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 6,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/storage.dart';"
+    },
+    {
+      "line": 31,
+      "text": "        () => Directory.systemTemp.createTemp('tableo-delta-ui-'),"
+    },
+    {
+      "line": 43,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 102,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/csv_example_test.dart": [
+    {
+      "line": 6,
+      "text": "import 'package:tableo/csv_example.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 8,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 9,
+      "text": "import 'package:tableo/storage.dart';"
+    },
+    {
+      "line": 56,
+      "text": "        () => Directory.systemTemp.createTemp('tableo-csv-example-'),"
+    },
+    {
+      "line": 62,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/domain_test.dart": [
+    {
+      "line": 4,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/storage.dart';"
+    },
+    {
+      "line": 6,
+      "text": "import 'package:tableo/exports.dart';"
+    },
+    {
+      "line": 117,
+      "text": "    final dir = await Directory.systemTemp.createTemp('tableo-test-');"
+    },
+    {
+      "line": 140,
+      "text": "    final dir = await Directory.systemTemp.createTemp('tableo-pdf-');"
+    }
+  ],
+  "test/event_backup_test.dart": [
+    {
+      "line": 6,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/event_backup.dart';"
+    },
+    {
+      "line": 8,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 9,
+      "text": "import 'package:tableo/storage.dart';"
+    },
+    {
+      "line": 46,
+      "text": "        jsonEncode({'format': 'tableo-backup', 'version': 1, 'events': []}),"
+    },
+    {
+      "line": 53,
+      "text": "          'format': 'tableo-backup',"
+    },
+    {
+      "line": 81,
+      "text": "    final backup = File('${folder.path}/complete.tableo.json');"
+    },
+    {
+      "line": 113,
+      "text": "    final folder = await Directory.systemTemp.createTemp('tableo-backup-');"
+    },
+    {
+      "line": 161,
+      "text": "      final path = File('tmp/backup-ui-${uid()}.tableo.json').absolute.path;"
+    },
+    {
+      "line": 162,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/event_comfort_test.dart": [
+    {
+      "line": 5,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 6,
+      "text": "import 'package:tableo/event_backup.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 14,
+      "text": "import 'package:tableo/parcours.dart';"
+    },
+    {
+      "line": 187,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/event_delete_test.dart": [
+    {
+      "line": 5,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 6,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/storage.dart';"
+    },
+    {
+      "line": 37,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 53,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 62,
+      "text": "      'tableo-event-delete-',"
+    }
+  ],
+  "test/event_icons_test.dart": [
+    {
+      "line": 3,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 4,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/event_icons.dart';"
+    },
+    {
+      "line": 33,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 54,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/event_tab_order_test.dart": [
+    {
+      "line": 5,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 6,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/storage.dart';"
+    },
+    {
+      "line": 24,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 45,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/external_links_test.dart": [
+    {
+      "line": 3,
+      "text": "import 'package:tableo/external_links.dart';"
+    },
+    {
+      "line": 4,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 12,
+      "text": "      'https://github.com/freakbn777/Tableo',"
+    },
+    {
+      "line": 37,
+      "text": "      await t.pumpWidget(Tableo(store: store, linkOpener: links));"
+    }
+  ],
+  "test/file_dialogs_test.dart": [
+    {
+      "line": 5,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 6,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/storage.dart';"
+    },
+    {
+      "line": 8,
+      "text": "import 'package:tableo/file_dialogs.dart';"
+    },
+    {
+      "line": 43,
+      "text": "      expect(withExtension('projet.json', 'tableo.json'), 'projet.json');"
+    },
+    {
+      "line": 56,
+      "text": "      await tester.pumpWidget(Tableo(store: store, fileDialogs: picker));"
+    },
+    {
+      "line": 87,
+      "text": "      await tester.pumpWidget(Tableo(store: TestStore(), fileDialogs: picker));"
+    },
+    {
+      "line": 112,
+      "text": "          action == 'Export PDF' ? 'pdf' : 'tableo.json',"
+    }
+  ],
+  "test/furniture_category_test.dart": [
+    {
+      "line": 3,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 4,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 19,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/furniture_order_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    }
+  ],
+  "test/furniture_usage_deployment_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 3,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 43,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/github_updates_test.dart": [
+    {
+      "line": 4,
+      "text": "import 'package:tableo/github_updates.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/storage.dart';"
+    },
+    {
+      "line": 6,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 15,
+      "text": "      repository: 'example/tableo',"
+    },
+    {
+      "line": 27,
+      "text": "        repository: 'example/tableo',"
+    },
+    {
+      "line": 40,
+      "text": "        'https://api.github.com/repos/example/tableo/releases/latest',"
+    },
+    {
+      "line": 44,
+      "text": "        'https://github.com/example/tableo/releases/tag/v1.0.31',"
+    },
+    {
+      "line": 70,
+      "text": "      r'C:\\Users\\Fictif\\AppData\\Roaming\\Tableo',"
+    },
+    {
+      "line": 81,
+      "text": "      final dir = await Directory.systemTemp.createTemp('tableo-update-test-');"
+    },
+    {
+      "line": 89,
+      "text": "        final db = File('${dir.path}${Platform.pathSeparator}tableo.sqlite');"
+    },
+    {
+      "line": 93,
+      "text": "          repository: 'example/tableo',"
+    }
+  ],
+  "test/imposed_parcours_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 3,
+      "text": "import 'package:tableo/parcours.dart';"
+    }
+  ],
+  "test/join_gap_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 3,
+      "text": "import 'package:tableo/magnetism.dart';"
+    },
+    {
+      "line": 4,
+      "text": "import 'package:tableo/parcours.dart';"
+    }
+  ],
+  "test/join_gap_ui_test.dart": [
+    {
+      "line": 3,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 4,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 38,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 77,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/joining_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    }
+  ],
+  "test/keyboard_shortcuts_test.dart": [
+    {
+      "line": 4,
+      "text": "import 'package:tableo/keyboard_dialog.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 6,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 90,
+      "text": "      await tester.pumpWidget(Tableo(store: MemoryStore([p])));"
+    },
+    {
+      "line": 144,
+      "text": "      await tester.pumpWidget(Tableo(store: MemoryStore([p])));"
+    },
+    {
+      "line": 179,
+      "text": "      await tester.pumpWidget(Tableo(store: MemoryStore([p])));"
+    }
+  ],
+  "test/local_join_gap_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    }
+  ],
+  "test/magnetism_test.dart": [
+    {
+      "line": 4,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/magnetism.dart';"
+    }
+  ],
+  "test/meal_preferences_visibility_test.dart": [
+    {
+      "line": 4,
+      "text": "import 'package:tableo/exports.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/plan_export.dart';"
+    },
+    {
+      "line": 9,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 10,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 11,
+      "text": "import 'package:tableo/event_backup.dart';"
+    },
+    {
+      "line": 12,
+      "text": "import 'package:tableo/plan_tools.dart';"
+    },
+    {
+      "line": 90,
+      "text": "      await tester.pumpWidget(Tableo(store: MemoryStore([p])));"
+    },
+    {
+      "line": 114,
+      "text": "      await tester.pumpWidget(Tableo(store: MemoryStore([p])));"
+    }
+  ],
+  "test/mixed_furniture_test.dart": [
+    {
+      "line": 6,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/event_backup.dart';"
+    },
+    {
+      "line": 8,
+      "text": "import 'package:tableo/exports.dart';"
+    },
+    {
+      "line": 9,
+      "text": "import 'package:tableo/plan_export.dart';"
+    },
+    {
+      "line": 10,
+      "text": "import 'package:tableo/plan_tools.dart';"
+    }
+  ],
+  "test/mixed_furniture_ui_test.dart": [
+    {
+      "line": 11,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 12,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 45,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 86,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 144,
+      "text": "          child: Tableo(store: store),"
+    },
+    {
+      "line": 168,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 217,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 247,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/mixed_joining_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    }
+  ],
+  "test/object_layers_test.dart": [
+    {
+      "line": 3,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 4,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/plan_export.dart';"
+    },
+    {
+      "line": 31,
+      "text": "        await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 80,
+      "text": "        await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/object_spacing_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    }
+  ],
+  "test/open_parcours_test.dart": [
+    {
+      "line": 5,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/parcours.dart';"
+    }
+  ],
+  "test/organization_features_test.dart": [
+    {
+      "line": 6,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/exports.dart';"
+    },
+    {
+      "line": 8,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 9,
+      "text": "import 'package:tableo/plan_export.dart';"
+    },
+    {
+      "line": 206,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 240,
+      "text": "    await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 270,
+      "text": "    await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/organizer_features_test.dart": [
+    {
+      "line": 4,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/exports.dart';"
+    }
+  ],
+  "test/organizer_features_ui_test.dart": [
+    {
+      "line": 4,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 29,
+      "text": "    await t.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 68,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 111,
+      "text": "    await t.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/outside_tables_tools_test.dart": [
+    {
+      "line": 6,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 33,
+      "text": "        tableOutsideRoom(p, tables(p).firstWhere((t) => t['id'] == 'outside')),"
+    },
+    {
+      "line": 36,
+      "text": "      await tester.pumpWidget(Tableo(store: MemoryStore([p])));"
+    }
+  ],
+  "test/parcours_kind_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 3,
+      "text": "import 'package:tableo/parcours.dart';"
+    }
+  ],
+  "test/parcours_snapshot_test.dart": [
+    {
+      "line": 7,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 8,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 9,
+      "text": "import 'package:tableo/parcours.dart';"
+    },
+    {
+      "line": 10,
+      "text": "import 'package:tableo/parcours_snapshot.dart';"
+    },
+    {
+      "line": 40,
+      "text": "          child: Tableo("
+    },
+    {
+      "line": 131,
+      "text": "          Tableo(key: ValueKey(activity), store: MemoryStore([p])),"
+    }
+  ],
+  "test/parcours_test.dart": [
+    {
+      "line": 4,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/parcours.dart';"
+    },
+    {
+      "line": 6,
+      "text": "import 'package:tableo/plan_export.dart';"
+    }
+  ],
+  "test/parcours_ui_test.dart": [
+    {
+      "line": 8,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 9,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 10,
+      "text": "import 'package:tableo/parcours.dart';"
+    },
+    {
+      "line": 11,
+      "text": "import 'package:tableo/parcours_painter.dart';"
+    },
+    {
+      "line": 12,
+      "text": "import 'package:tableo/plan_export.dart';"
+    },
+    {
+      "line": 56,
+      "text": "        child: Tableo(store: MemoryStore([p])),"
+    },
+    {
+      "line": 87,
+      "text": "        child: Tableo(store: MemoryStore([p])),"
+    },
+    {
+      "line": 117,
+      "text": "          child: Tableo(store: MemoryStore([p])),"
+    },
+    {
+      "line": 143,
+      "text": "          Tableo("
+    },
+    {
+      "line": 169,
+      "text": "    await tester.pumpWidget(Tableo(store: MemoryStore([p])));"
+    },
+    {
+      "line": 194,
+      "text": "      Tableo(store: MemoryStore([p]), arrangementRunner: immediateArrangement),"
+    },
+    {
+      "line": 241,
+      "text": "          child: Tableo(store: MemoryStore([p])),"
+    }
+  ],
+  "test/parcours_usage_error_ui_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 3,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 21,
+      "text": "        Tableo("
+    }
+  ],
+  "test/parcours_zones_test.dart": [
+    {
+      "line": 4,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/parcours.dart';"
+    }
+  ],
+  "test/partial_backup_test.dart": [
+    {
+      "line": 6,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/event_backup.dart';"
+    },
+    {
+      "line": 8,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 9,
+      "text": "import 'package:tableo/storage.dart';"
+    },
+    {
+      "line": 148,
+      "text": "      final path = File('tmp/injection-${uid()}.tableo.json').absolute.path;"
+    },
+    {
+      "line": 152,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/pdf_current_test.dart": [
+    {
+      "line": 6,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/exports.dart';"
+    },
+    {
+      "line": 8,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 9,
+      "text": "import 'package:tableo/storage.dart';"
+    },
+    {
+      "line": 100,
+      "text": "      final dir = await Directory.systemTemp.createTemp('tableo-existing-pdf-');"
+    },
+    {
+      "line": 117,
+      "text": "        'tableo-pdf-workspaces-',"
+    },
+    {
+      "line": 155,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/pdf_selection_test.dart": [
+    {
+      "line": 5,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 6,
+      "text": "import 'package:tableo/exports.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 71,
+      "text": "      await tester.pumpWidget(Tableo(store: TestStore(), fileDialogs: picker));"
+    }
+  ],
+  "test/perimeter_zone_parcours_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 3,
+      "text": "import 'package:tableo/parcours.dart';"
+    }
+  ],
+  "test/place_labels_test.dart": [
+    {
+      "line": 10,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 11,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 85,
+      "text": "          child: Tableo(store: MemoryStore([p])),"
+    }
+  ],
+  "test/place_proximity_test.dart": [
+    {
+      "line": 4,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/event_backup.dart';"
+    },
+    {
+      "line": 6,
+      "text": "import 'package:tableo/backup_merge.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/plan_export.dart';"
+    }
+  ],
+  "test/plan_annotations_test.dart": [
+    {
+      "line": 5,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 6,
+      "text": "import 'package:tableo/parcours.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/parcours_painter.dart';"
+    },
+    {
+      "line": 8,
+      "text": "import 'package:tableo/exports.dart';"
+    },
+    {
+      "line": 9,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 125,
+      "text": "    await t.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 152,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/plan_images_test.dart": [
+    {
+      "line": 6,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 8,
+      "text": "import 'package:tableo/event_backup.dart';"
+    },
+    {
+      "line": 9,
+      "text": "import 'package:tableo/exports.dart';"
+    },
+    {
+      "line": 10,
+      "text": "import 'package:tableo/parcours.dart';"
+    },
+    {
+      "line": 81,
+      "text": "    await t.pumpWidget(Tableo(store: store, fileDialogs: LogoDialog()));"
+    }
+  ],
+  "test/plan_layers_test.dart": [
+    {
+      "line": 8,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 9,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 10,
+      "text": "import 'package:tableo/event_backup.dart';"
+    },
+    {
+      "line": 11,
+      "text": "import 'package:tableo/exports.dart';"
+    },
+    {
+      "line": 12,
+      "text": "import 'package:tableo/parcours.dart';"
+    },
+    {
+      "line": 73,
+      "text": "        await t.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 123,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/plan_markers_test.dart": [
+    {
+      "line": 3,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 4,
+      "text": "import 'package:tableo/plan_export.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/plan_marker.dart';"
+    }
+  ],
+  "test/plan_safety_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    }
+  ],
+  "test/plan_toolbar_test.dart": [
+    {
+      "line": 4,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 46,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 88,
+      "text": "    await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 146,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 192,
+      "text": "    await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 225,
+      "text": "    await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/plan_tools_test.dart": [
+    {
+      "line": 4,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/plan_tools.dart';"
+    },
+    {
+      "line": 6,
+      "text": "import 'package:tableo/backup_merge.dart';"
+    }
+  ],
+  "test/plan_tools_ui_test.dart": [
+    {
+      "line": 4,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 27,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 60,
+      "text": "    await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 95,
+      "text": "    await tester.pumpWidget(Tableo(store: store, fileDialogs: dialogs));"
+    },
+    {
+      "line": 145,
+      "text": "        await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 183,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 215,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/plan_visual_test.dart": [
+    {
+      "line": 10,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 11,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 45,
+      "text": "        child: Tableo(store: MemoryStore([project])),"
+    }
+  ],
+  "test/plan_workspace_ui_test.dart": [
+    {
+      "line": 8,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 9,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 25,
+      "text": "      await t.pumpWidget(Tableo(store: MemoryStore([a, b])));"
+    },
+    {
+      "line": 76,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 144,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 177,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 193,
+      "text": "        child: Tableo(store: store),"
+    }
+  ],
+  "test/preparation_checks_test.dart": [
+    {
+      "line": 3,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 4,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 112,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/proportional_resize_test.dart": [
+    {
+      "line": 7,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 8,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 104,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/proximity_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    }
+  ],
+  "test/proximity_ui_test.dart": [
+    {
+      "line": 3,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 4,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 14,
+      "text": "    await tester.pumpWidget(Tableo(store: SnapshotStore()));"
+    },
+    {
+      "line": 51,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 114,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/reservation_count_edit_test.dart": [
+    {
+      "line": 3,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 4,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 16,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 67,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/reservation_delete_test.dart": [
+    {
+      "line": 5,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 6,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/storage.dart';"
+    },
+    {
+      "line": 66,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 207,
+      "text": "    final dir = await Directory.systemTemp.createTemp('tableo-delete-');"
+    },
+    {
+      "line": 237,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 262,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 287,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/rotation_handles_test.dart": [
+    {
+      "line": 7,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 8,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 160,
+      "text": "        await t.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 187,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 218,
+      "text": "    await t.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 245,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 286,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 298,
+      "text": "      await t.pumpWidget(Tableo(store: fixed));"
+    }
+  ],
+  "test/selection_mode_icon_test.dart": [
+    {
+      "line": 3,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 11,
+      "text": "    await t.pumpWidget(Tableo(store: SnapshotStore()));"
+    }
+  ],
+  "test/service_and_locked_test.dart": [
+    {
+      "line": 3,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 4,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 21,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 103,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/special_needs_export_test.dart": [
+    {
+      "line": 4,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/exports.dart';"
+    },
+    {
+      "line": 6,
+      "text": "import 'package:tableo/plan_export.dart';"
+    }
+  ],
+  "test/stand_assignment_guidance_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 3,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 50,
+      "text": "        await t.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/stand_contiguous_integrity_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    }
+  ],
+  "test/stand_contiguous_metres_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    }
+  ],
+  "test/stand_model_mixing_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    }
+  ],
+  "test/stand_name_visibility_test.dart": [
+    {
+      "line": 3,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 4,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 22,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/table_cards_test.dart": [
+    {
+      "line": 4,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/exports.dart';"
+    }
+  ],
+  "test/theme_test.dart": [
+    {
+      "line": 8,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 9,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 10,
+      "text": "import 'package:tableo/storage.dart';"
+    },
+    {
+      "line": 24,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 71,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 88,
+      "text": "      final directory = await Directory.systemTemp.createTemp('tableo-theme-');"
+    },
+    {
+      "line": 145,
+      "text": "        child: Tableo(store: store),"
+    }
+  ],
+  "test/ui_test.dart": [
+    {
+      "line": 11,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 12,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 13,
+      "text": "import 'package:tableo/storage.dart';"
+    },
+    {
+      "line": 42,
+      "text": "      await tester.pumpWidget(Tableo(store: MemoryStore([project])));"
+    },
+    {
+      "line": 80,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 192,
+      "text": "        child: Tableo(store: MemoryStore()),"
+    }
+  ],
+  "test/update_ui_test.dart": [
+    {
+      "line": 3,
+      "text": "import 'package:tableo/external_links.dart';"
+    },
+    {
+      "line": 4,
+      "text": "import 'package:tableo/github_updates.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 14,
+      "text": "      Uri.https('github.com', '/example/tableo/blob/main/CHANGELOG.md');"
+    },
+    {
+      "line": 18,
+      "text": "    final url = Uri.https('github.com', '/example/tableo/releases/tag/v1.0.32');"
+    },
+    {
+      "line": 40,
+      "text": "        Tableo(store: store, updateService: updates, linkOpener: links),"
+    },
+    {
+      "line": 47,
+      "text": "      expect(find.text('Tableo 1.0.32 est disponible'), findsOneWidget);"
+    },
+    {
+      "line": 50,
+      "text": "      expect(links.opened.single.path, '/example/tableo/releases/tag/v1.0.32');"
+    }
+  ],
+  "test/waiting_exports_test.dart": [
+    {
+      "line": 5,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 6,
+      "text": "import 'package:tableo/exports.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/plan_tools.dart';"
+    },
+    {
+      "line": 8,
+      "text": "import 'package:tableo/event_backup.dart';"
+    }
+  ],
+  "test/wall_clearance_test.dart": [
+    {
+      "line": 2,
+      "text": "import 'package:tableo/domain.dart';"
+    }
+  ],
+  "test/wall_clearance_ui_test.dart": [
+    {
+      "line": 3,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 4,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 21,
+      "text": "        Tableo("
+    }
+  ],
+  "test/workspace_locks_test.dart": [
+    {
+      "line": 4,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 5,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 16,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 63,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 85,
+      "text": "      await t.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/workspace_stats_test.dart": [
+    {
+      "line": 6,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 7,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 8,
+      "text": "import 'package:tableo/storage.dart';"
+    },
+    {
+      "line": 34,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 59,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    },
+    {
+      "line": 146,
+      "text": "    final dir = await Directory.systemTemp.createTemp('tableo-counters-');"
+    },
+    {
+      "line": 168,
+      "text": "      await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "test/zone_and_furniture_test.dart": [
+    {
+      "line": 3,
+      "text": "import 'package:tableo/domain.dart';"
+    },
+    {
+      "line": 4,
+      "text": "import 'package:tableo/main.dart';"
+    },
+    {
+      "line": 23,
+      "text": "        await tester.pumpWidget(Tableo(store: store));"
+    }
+  ],
+  "tools/generate_app_icons.py": [
+    {
+      "line": 1,
+      "text": "\"\"\"Render Tableo's Modules mark, shared by Windows and Microsoft Store.\"\"\""
+    },
+    {
+      "line": 27,
+      "text": "    (assets/'tableo-modules.svg').write_text(svg, encoding='utf-8')"
+    },
+    {
+      "line": 29,
+      "text": "    master.save(assets/'tableo-modules.png')"
+    }
+  ],
+  "tools/package_release.py": [
+    {
+      "line": 12,
+      "text": "    'tableo.exe', 'flutter_windows.dll', 'sqlite3.dll', 'data/app.so', 'data/icudtl.dat',"
+    },
+    {
+      "line": 76,
+      "text": "    target = root / 'dist' / ('Tableo-test' if local else f'Tableo-{version}')"
+    },
+    {
+      "line": 77,
+      "text": "    archive = root / 'dist' / f'Tableo-Windows-{version}.zip'"
+    },
+    {
+      "line": 92,
+      "text": "        (target/'LOCAL-TEST.txt').write_text(f'Test local de Tableo {version}. Non publié. Les prochains essais remplacent uniquement les fichiers de ce dossier.\\n',encoding='utf-8')"
+    }
+  ],
+  "tools/package_store.py": [
+    {
+      "line": 43,
+      "text": "        'DisplayName': identity.get('displayName', 'Tableo'),"
+    },
+    {
+      "line": 61,
+      "text": "        'Id': 'Tableo', 'Executable': 'tableo.exe', 'EntryPoint': 'Windows.FullTrustApplication'})"
+    },
+    {
+      "line": 63,
+      "text": "        'DisplayName': identity.get('displayName', 'Tableo'),"
+    },
+    {
+      "line": 89,
+      "text": "    output = root/'output/store'/f'Tableo-{version}-x64.msix'"
+    }
+  ],
+  "tools/publication_files.py": [
+    {
+      "line": 16,
+      "text": "    'tools/generate_app_icons.py', 'assets/branding/tableo-modules.svg',"
+    },
+    {
+      "line": 17,
+      "text": "    'assets/branding/tableo-modules.png', 'assets/branding/IDENTITE.md',"
+    }
+  ],
+  "tools/test_publication.py": [
+    {
+      "line": 24,
+      "text": "            (source/'tableo.exe').write_bytes(b'updated fixture')"
+    },
+    {
+      "line": 26,
+      "text": "            target=root/'dist/Tableo-test'"
+    },
+    {
+      "line": 27,
+      "text": "            self.assertEqual((target/'tableo.exe').read_bytes(),b'updated fixture')"
+    },
+    {
+      "line": 28,
+      "text": "            self.assertEqual([p.name for p in (root/'dist').iterdir()],['Tableo-test'])"
+    },
+    {
+      "line": 29,
+      "text": "            private=target/'tableo.sqlite'"
+    },
+    {
+      "line": 35,
+      "text": "        for name in ['lib/events.sqlite', 'test/reservations.csv', 'backup.tableo.json',"
+    },
+    {
+      "line": 50,
+      "text": "            for name in ['tableo.sqlite', 'data/backup.json', 'reservations.csv', 'plan.pdf']:"
+    }
+  ],
+  "tools/test_store_package.py": [
+    {
+      "line": 7,
+      "text": "        identity={'name': 'Tableo.Fixture', 'publisher': 'CN=Fixture & Test',"
+    },
+    {
+      "line": 8,
+      "text": "                  'publisherDisplayName': 'Fixture & Test', 'displayName': 'Tableo'}"
+    },
+    {
+      "line": 17,
+      "text": "        identity={'name': 'Tableo.Fixture','publisher':'CN=Fixture','publisherDisplayName':'Fixture'}"
+    }
+  ],
+  "windows/CMakeLists.txt": [
+    {
+      "line": 3,
+      "text": "project(tableo LANGUAGES CXX)"
+    },
+    {
+      "line": 7,
+      "text": "set(BINARY_NAME \"tableo\")"
+    }
+  ],
+  "windows/runner/Runner.rc": [
+    {
+      "line": 93,
+      "text": "            VALUE \"FileDescription\", \"tableo\" \"\\0\""
+    },
+    {
+      "line": 95,
+      "text": "            VALUE \"InternalName\", \"tableo\" \"\\0\""
+    },
+    {
+      "line": 97,
+      "text": "            VALUE \"OriginalFilename\", \"tableo.exe\" \"\\0\""
+    },
+    {
+      "line": 98,
+      "text": "            VALUE \"ProductName\", \"tableo\" \"\\0\""
+    }
+  ],
+  "windows/runner/main.cpp": [
+    {
+      "line": 30,
+      "text": "  if (!window.Create(L\"tableo\", origin, size)) {"
+    }
+  ]
+}

@@ -388,7 +388,7 @@ class _TableoState extends State<Tableo> {
   @override
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
-    title: 'Tableo',
+    title: 'Sallunio',
     scaffoldMessengerKey: messenger,
     theme: appTheme(Brightness.light),
     darkTheme: appTheme(Brightness.dark),
@@ -812,7 +812,7 @@ class _HomeState extends State<Home> {
   Future<void> updateDetails(UpdateInfo update) => showDialog<void>(
     context: context,
     builder: (c) => KeyboardDialog(
-      title: Text('Tableo ${update.version} est disponible'),
+      title: Text('Sallunio ${update.version} est disponible'),
       content: const SizedBox(
         width: 500,
         child: Text(
@@ -3310,7 +3310,7 @@ class _HomeState extends State<Home> {
     if (accepted != true || !mounted) return;
     final captured = clone(p!);
     final initial =
-        '${widget.store.directory}${Platform.pathSeparator}tableo-${section.toLowerCase().replaceAll(' ', '-')}.csv';
+        '${widget.store.directory}${Platform.pathSeparator}sallunio-${section.toLowerCase().replaceAll(' ', '-')}.csv';
     final path = await ask(
       'Enregistrer le CSV',
       initial,
@@ -4125,7 +4125,7 @@ class _HomeState extends State<Home> {
     }
     final defaultPath = isPdf
         ? newPdfPath(widget.store.directory)
-        : '${widget.store.directory}${Platform.pathSeparator}projet-tableo.tableo.json';
+        : '${widget.store.directory}${Platform.pathSeparator}projet-sallunio.tableo.json';
     final path = await ask(
       '$action • chemin du fichier',
       defaultPath,
@@ -4134,7 +4134,7 @@ class _HomeState extends State<Home> {
         title: action,
         initialPath: defaultPath,
         extension: isPdf ? 'pdf' : 'tableo.json',
-        description: isPdf ? 'PDF (*.pdf)' : 'Projet Tableo (*.json)',
+        description: isPdf ? 'PDF (*.pdf)' : 'Projet Sallunio (*.json)',
         save: action != 'Importer projet',
       ),
     );
@@ -4917,7 +4917,10 @@ class _HomeState extends State<Home> {
     if (p == null) {
       if (loaded) {
         return Scaffold(
-          appBar: AppBar(title: const Text('Tableo'), actions: [themeButton()]),
+          appBar: AppBar(
+            title: const Text('Sallunio'),
+            actions: [themeButton()],
+          ),
           bottomNavigationBar: Padding(
             padding: const EdgeInsets.all(8),
             child: Row(
@@ -4947,7 +4950,7 @@ class _HomeState extends State<Home> {
         );
       }
       return Scaffold(
-        appBar: AppBar(title: const Text('Tableo'), actions: [themeButton()]),
+        appBar: AppBar(title: const Text('Sallunio'), actions: [themeButton()]),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -4959,9 +4962,9 @@ class _HomeState extends State<Home> {
       appBar: AppBar(
         title: Row(
           children: [
-            const Icon(Icons.table_restaurant),
+            Image.asset('assets/branding/sallunio.png', width: 32, height: 32),
             const SizedBox(width: 10),
-            const Text('Tableo'),
+            const Text('Sallunio'),
             const SizedBox(width: 24),
             Expanded(
               child: Row(

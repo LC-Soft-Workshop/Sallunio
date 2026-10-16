@@ -1,7 +1,16 @@
-# Historique de Tableo
+# Historique de Sallunio (anciennement Tableo)
 
 Historique en français, établi à partir des validations conservées du projet.
 Les anciennes versions ne constituent pas des livraisons GitHub rétroactives.
+
+## 1.2.2
+
+- Identité GitHub harmonisée : compte LC-Soft-Workshop, dépôt Sallunio et liens de mise à jour actualisés. Les anciennes adresses du dépôt, du wiki et des téléchargements restent redirigées.
+
+- Migration de l’identité publique Tableo vers Sallunio et métadonnées Windows LC Software Workshop.
+- Intégration de l’image officielle fournie, sans redessin, en PNG transparent et ICO multi-tailles ; application, exécutable et ressources Store harmonisés.
+- Nouvel exécutable sallunio.exe et futurs artefacts Sallunio ; chemins de données, formats de sauvegarde et identifiants MSIX historiques conservés.
+- Procédure documentée pour la fiche Store existante, le renommage du dépôt, les validations et le retour arrière. Publication autorisée pour la version 1.2.2 ; le changement du nom public d’éditeur Microsoft reste soumis aux possibilités du compte.
 
 ## 1.2.1
 
